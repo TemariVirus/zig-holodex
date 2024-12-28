@@ -1,0 +1,9 @@
+*     text=auto eol=lf
+
+*.md  text
+
+*.zig text
+*.zon text
+
+*.exe binary
+*.lib binary
