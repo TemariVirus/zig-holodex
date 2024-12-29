@@ -1,8 +1,9 @@
 const std = @import("std");
 const meta = std.meta;
 const testing = std.testing;
+const Type = std.builtin.Type;
 
-fn QueryFormatter(comptime T: type) type {
+pub fn QueryFormatter(comptime T: type) type {
     switch (@typeInfo(T)) {
         .Struct => {},
         else => @compileError("Expected struct, found '" ++ @typeName(T) ++ "'"),
@@ -16,25 +17,53 @@ fn QueryFormatter(comptime T: type) type {
                 try writer.writeAll("?");
             }
 
-            inline for (comptime meta.fieldNames(T), 0..) |key, i| {
-                if (i != 0) {
-                    try writer.writeAll("&");
+            var printed = false;
+            inline for (comptime meta.fieldNames(T)) |key| {
+                const value = @field(self.query, key);
+                if (willPrint(value)) {
+                    if (printed) {
+                        try writer.writeAll("&");
+                    }
+                    printed = true;
                 }
 
-                const value = @field(self.query, key);
                 switch (@typeInfo(@TypeOf(value))) {
-                    .Pointer => |info| if (info.child == u8) {
-                        try writer.print("{s}={s}", .{ key, value });
-                    } else {
-                        try writer.print("{s}=", .{key});
-                        for (value, 0..) |item, j| {
-                            if (j != 0) {
-                                try writer.writeAll(",");
-                            }
-                            try writer.print("{s}", .{item});
-                        }
-                    },
+                    .Pointer => |info| try handlePointer(info, key, value, writer),
+                    .Optional => |info| try handleOptional(info, key, value, writer),
                     else => try writer.print("{s}={}", .{ key, value }),
+                }
+            }
+        }
+
+        fn willPrint(value: anytype) bool {
+            return switch (@typeInfo(@TypeOf(value))) {
+                .Optional => value != null,
+                else => true,
+            };
+        }
+
+        fn handlePointer(info: Type.Pointer, key: []const u8, value: anytype, writer: anytype) !void {
+            if (info.child == u8) {
+                // String
+                try writer.print("{s}={s}", .{ key, value });
+            } else {
+                // Array of strings
+                try writer.print("{s}=", .{key});
+                for (value, 0..) |item, j| {
+                    if (j != 0) {
+                        try writer.writeAll(",");
+                    }
+                    try writer.print("{s}", .{item});
+                }
+            }
+        }
+
+        fn handleOptional(info: Type.Optional, key: []const u8, value: anytype, writer: anytype) !void {
+            if (value) |val| {
+                if (info.child == []const u8) {
+                    try writer.print("{s}={s}", .{ key, val });
+                } else {
+                    try writer.print("{s}={}", .{ key, val });
                 }
             }
         }
@@ -49,18 +78,31 @@ pub fn formatQuery(query: anytype) QueryFormatter(meta.Child(@TypeOf(query))) {
 
 test formatQuery {
     const TestQuery = struct {
+        null: ?[]const u8,
         int: u32,
         str: []const u8,
         list: []const []const u8,
     };
-    const query = TestQuery{
-        .int = 42,
-        .str = "Man I Love Fauna",
-        .list = &.{ "", "", "oui oui", "PP" },
-    };
+
     try testing.expectFmt(
         "holodex.net/ya/goo?int=42&str=Man I Love Fauna&list=,,oui oui,PP",
         "holodex.net/ya/goo{}",
-        .{formatQuery(&query)},
+        .{formatQuery(&TestQuery{
+            .null = null,
+            .int = 42,
+            .str = "Man I Love Fauna",
+            .list = &.{ "", "", "oui oui", "PP" },
+        })},
+    );
+
+    try testing.expectFmt(
+        "holodex.net/ya/goo?null=Hopes and dreams&int=0&str=hololive is an idol group like AKB48&list=",
+        "holodex.net/ya/goo{}",
+        .{formatQuery(&TestQuery{
+            .null = "Hopes and dreams",
+            .int = 0,
+            .str = "hololive is an idol group like AKB48",
+            .list = &.{},
+        })},
     );
 }
