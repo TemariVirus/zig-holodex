@@ -29,7 +29,8 @@ pub fn QueryFormatter(comptime T: type) type {
 
                 switch (@typeInfo(@TypeOf(value))) {
                     .Pointer => |info| try handlePointer(info, key, value, writer),
-                    .Optional => |info| try handleOptional(info, key, value, writer),
+                    .Optional => try handleOptional(key, value, writer),
+                    .Enum => try writer.print("{s}={s}", .{ key, @tagName(value) }),
                     else => try writer.print("{s}={}", .{ key, value }),
                 }
             }
@@ -58,12 +59,12 @@ pub fn QueryFormatter(comptime T: type) type {
             }
         }
 
-        fn handleOptional(info: Type.Optional, key: []const u8, value: anytype, writer: anytype) !void {
+        fn handleOptional(key: []const u8, value: anytype, writer: anytype) !void {
             if (value) |val| {
-                if (info.child == []const u8) {
-                    try writer.print("{s}={s}", .{ key, val });
-                } else {
-                    try writer.print("{s}={}", .{ key, val });
+                switch (@typeInfo(@TypeOf(val))) {
+                    .Pointer => |info| try handlePointer(info, key, val, writer),
+                    .Enum => try writer.print("{s}={s}", .{ key, @tagName(val) }),
+                    else => try writer.print("{s}={}", .{ key, val }),
                 }
             }
         }
@@ -82,27 +83,30 @@ test formatQuery {
         int: u32,
         str: []const u8,
         list: []const []const u8,
+        @"enum": enum { @"69%", sleepingTogether },
     };
 
     try testing.expectFmt(
-        "holodex.net/ya/goo?int=42&str=Man I Love Fauna&list=,,oui oui,PP",
+        "holodex.net/ya/goo?int=42&str=Man I Love Fauna&list=,,oui oui,PP&enum=69%",
         "holodex.net/ya/goo{}",
         .{formatQuery(&TestQuery{
             .null = null,
             .int = 42,
             .str = "Man I Love Fauna",
             .list = &.{ "", "", "oui oui", "PP" },
+            .@"enum" = .@"69%",
         })},
     );
 
     try testing.expectFmt(
-        "holodex.net/ya/goo?null=Hopes and dreams&int=0&str=hololive is an idol group like AKB48&list=",
+        "holodex.net/ya/goo?null=Hopes and dreams&int=0&str=hololive is an idol group like AKB48&list=&enum=sleepingTogether",
         "holodex.net/ya/goo{}",
         .{formatQuery(&TestQuery{
             .null = "Hopes and dreams",
             .int = 0,
             .str = "hololive is an idol group like AKB48",
             .list = &.{},
+            .@"enum" = .sleepingTogether,
         })},
     );
 }
