@@ -8,6 +8,7 @@ const meta = std.meta;
 const holodex = @import("root.zig");
 const Channel = holodex.types.Channel;
 const ChannelType = Channel.ChannelType;
+const Pager = holodex.Pager;
 
 /// The API key to use for requests.
 api_key: []const u8,
@@ -65,6 +66,31 @@ pub fn fetch(
             .value = self.api_key,
         }},
     })).status;
+}
+
+/// Return a pager that iterates over the results of a query.
+/// `deinit` must be called to free the memory used by the pager.
+pub fn pager(
+    self: *Self,
+    comptime Response: type,
+    allocator: Allocator,
+    apiFn: anytype,
+    query: switch (@typeInfo(@TypeOf(apiFn))) {
+        .Fn => |info| info.params[2].type.?,
+        .Pointer => |info| @typeInfo(info.child).Fn.params[2].type.?,
+        else => @compileError("`apiFn` must be a function or a function pointer."),
+    },
+) Pager(Response, @TypeOf(query)) {
+    return Pager(Response, @TypeOf(query)){
+        .allocator = allocator,
+        .api = self,
+        .apiFn = switch (@typeInfo(@TypeOf(apiFn))) {
+            .Fn => &apiFn,
+            .Pointer => apiFn,
+            else => @compileError("`apiFn` must be a function or a function pointer."),
+        },
+        .query = query,
+    };
 }
 
 pub const ListChannelsOptions = struct {
