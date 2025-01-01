@@ -72,7 +72,7 @@ pub fn QueryFormatter(comptime T: type) type {
 }
 
 /// Create a new QueryFormatter for the given query struct.
-/// `query` must be a pointer to a struct.
+/// `query` must be a const pointer to a struct.
 pub fn formatQuery(query: anytype) QueryFormatter(meta.Child(@TypeOf(query))) {
     return QueryFormatter(meta.Child(@TypeOf(query))){ .query = query };
 }
