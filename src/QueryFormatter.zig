@@ -1,8 +1,53 @@
 const std = @import("std");
 const meta = std.meta;
 const testing = std.testing;
-const Type = std.builtin.Type;
 
+fn PercentEncodeImpl(comptime Writer: type) type {
+    return struct {
+        fn isUnreserved(c: u8) bool {
+            return switch (c) {
+                'A'...'Z', 'a'...'z', '0'...'9', '-', '.', '_', '~' => true,
+                else => false,
+            };
+        }
+
+        pub fn write(context: Writer, bytes: []const u8) Writer.Error!usize {
+            try std.Uri.Component.percentEncode(context, bytes, isUnreserved);
+            return bytes.len;
+        }
+    };
+}
+
+fn percentEncodedWriter(writer: anytype) std.io.GenericWriter(
+    @TypeOf(writer),
+    @TypeOf(writer).Error,
+    PercentEncodeImpl(@TypeOf(writer)).write,
+) {
+    return .{ .context = writer };
+}
+
+fn PercentFormatImpl(comptime T: type) type {
+    return struct {
+        data: T,
+
+        pub fn format(
+            self: @This(),
+            comptime fmt: []const u8,
+            options: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            const percent_encoder = percentEncodedWriter(writer);
+            try std.fmt.formatType(self.data, fmt, options, percent_encoder, 1);
+        }
+    };
+}
+
+fn percentEncode(value: anytype) PercentFormatImpl(@TypeOf(value)) {
+    return .{ .data = value };
+}
+
+/// Format a struct as a url query string.
+/// See `holodex.formatQuery` for more details.
 pub fn QueryFormatter(comptime T: type) type {
     switch (@typeInfo(T)) {
         .Struct => {},
@@ -30,8 +75,8 @@ pub fn QueryFormatter(comptime T: type) type {
                 switch (@typeInfo(@TypeOf(value))) {
                     .Pointer => |info| try handlePointer(info, key, value, writer),
                     .Optional => try handleOptional(key, value, writer),
-                    .Enum => try writer.print("{s}={s}", .{ key, @tagName(value) }),
-                    else => try writer.print("{s}={}", .{ key, value }),
+                    .Enum => try handleEnum(key, value, writer),
+                    else => try writer.print("{s}={}", .{ percentEncode(key), percentEncode(value) }),
                 }
             }
         }
@@ -43,18 +88,21 @@ pub fn QueryFormatter(comptime T: type) type {
             };
         }
 
-        fn handlePointer(info: Type.Pointer, key: []const u8, value: anytype, writer: anytype) !void {
+        fn handleString(key: []const u8, value: []const u8, writer: anytype) !void {
+            try writer.print("{s}={s}", .{ percentEncode(key), percentEncode(value) });
+        }
+
+        fn handlePointer(info: std.builtin.Type.Pointer, key: []const u8, value: anytype, writer: anytype) !void {
             if (info.child == u8) {
-                // String
-                try writer.print("{s}={s}", .{ key, value });
+                try handleString(key, value, writer);
             } else {
                 // Array of strings
-                try writer.print("{s}=", .{key});
+                try writer.print("{s}=", .{percentEncode(key)});
                 for (value, 0..) |item, j| {
                     if (j != 0) {
                         try writer.writeAll(",");
                     }
-                    try writer.print("{s}", .{item});
+                    try writer.print("{s}", .{percentEncode(item)});
                 }
             }
         }
@@ -63,18 +111,34 @@ pub fn QueryFormatter(comptime T: type) type {
             if (value) |val| {
                 switch (@typeInfo(@TypeOf(val))) {
                     .Pointer => |info| try handlePointer(info, key, val, writer),
-                    .Enum => try writer.print("{s}={s}", .{ key, @tagName(val) }),
-                    else => try writer.print("{s}={}", .{ key, val }),
+                    .Enum => try handleEnum(key, val, writer),
+                    else => try writer.print("{s}={}", .{ percentEncode(key), percentEncode(val) }),
                 }
             }
+        }
+
+        fn handleEnum(key: []const u8, value: anytype, writer: anytype) !void {
+            try handleString(key, @tagName(value), writer);
         }
     };
 }
 
-/// Create a new QueryFormatter for the given query struct.
+/// Create a new `holodex.QueryFormatter` for the given query struct.
 /// `query` must be a const pointer to a struct.
+/// Field names and values will be percent-encoded.
+/// `null` values are omitted.
+///
+/// ```zig
+/// const Query = struct {
+///     foo: []const u8,
+///     bar: ?u32,
+/// };
+/// const query = Query{ .foo = "hello world", .bar = null };
+/// std.debug.print("example.com{}\n", .{ formatQuery(&query) });
+/// // Output: example.com?foo=hello%20world
+/// ```
 pub fn formatQuery(query: anytype) QueryFormatter(meta.Child(@TypeOf(query))) {
-    return QueryFormatter(meta.Child(@TypeOf(query))){ .query = query };
+    return .{ .query = query };
 }
 
 test formatQuery {
@@ -84,22 +148,24 @@ test formatQuery {
         str: []const u8,
         list: []const []const u8,
         @"enum": enum { @"69%", sleepingTogether },
+        @"日本語🙃": ?[]const u8,
     };
 
     try testing.expectFmt(
-        "holodex.net/ya/goo?int=42&str=Man I Love Fauna&list=,,oui oui,PP&enum=69%",
+        "holodex.net/ya/goo?int=42&str=Man%20I%20Love%20Fauna&list=,,oui%20oui,PP,%E3%81%A1%E3%82%93%E3%81%A1%E3%82%93&enum=69%25",
         "holodex.net/ya/goo{}",
         .{formatQuery(&TestQuery{
             .null = null,
             .int = 42,
             .str = "Man I Love Fauna",
-            .list = &.{ "", "", "oui oui", "PP" },
+            .list = &.{ "", "", "oui oui", "PP", "ちんちん" },
             .@"enum" = .@"69%",
+            .@"日本語🙃" = null,
         })},
     );
 
     try testing.expectFmt(
-        "holodex.net/ya/goo?null=Hopes and dreams&int=0&str=hololive is an idol group like AKB48&list=&enum=sleepingTogether",
+        "holodex.net/ya/goo?null=Hopes%20and%20dreams&int=0&str=hololive%20is%20an%20idol%20group%20like%20AKB48&list=&enum=sleepingTogether&%E6%97%A5%E6%9C%AC%E8%AA%9E%F0%9F%99%83=%E9%87%8F%E5%AD%90%E3%83%81%E3%82%AD%E3%83%B3%E3%82%B9%E3%83%BC%E3%83%97%E3%82%B0%E3%83%A9%E3%82%B9%E3%83%93%E3%83%83%E3%82%B0%E3%83%81%E3%83%A5%E3%83%B3%E3%82%B0%E3%82%B9%E3%80%80%F0%9F%8F%83%F0%9F%92%A8%F0%9F%90%89",
         "holodex.net/ya/goo{}",
         .{formatQuery(&TestQuery{
             .null = "Hopes and dreams",
@@ -107,6 +173,7 @@ test formatQuery {
             .str = "hololive is an idol group like AKB48",
             .list = &.{},
             .@"enum" = .sleepingTogether,
+            .@"日本語🙃" = "量子チキンスープグラスビッグチュングス　🏃💨🐉",
         })},
     );
 }
