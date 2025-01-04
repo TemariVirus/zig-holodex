@@ -84,7 +84,7 @@ test Pager {
         }
     }).apiFn;
 
-    var api = Api.init(testing.allocator, .{ .api_key = "Bae's key" });
+    var api = Api.init(testing.allocator, .{ .api_key = "Bae's key" }) catch unreachable;
     defer api.deinit();
     var pager = Pager(T, Query){
         .allocator = testing.allocator,

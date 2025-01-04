@@ -16,10 +16,6 @@ pub fn QueryFormatter(comptime T: type) type {
         query: *const T,
 
         pub fn format(self: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
-            if (meta.fieldNames(T).len > 0) {
-                try writer.writeAll("?");
-            }
-
             var printed = false;
             inline for (comptime meta.fieldNames(T)) |key| {
                 const value = @field(self.query, key);
@@ -111,7 +107,7 @@ test formatQuery {
 
     try testing.expectFmt(
         "holodex.net/ya/goo?int=42&str=Man%20I%20Love%20Fauna&list=,,oui%20oui,PP,%E3%81%A1%E3%82%93%E3%81%A1%E3%82%93&enum=69%25",
-        "holodex.net/ya/goo{}",
+        "holodex.net/ya/goo?{}",
         .{formatQuery(&TestQuery{
             .null = null,
             .int = 42,
@@ -124,7 +120,7 @@ test formatQuery {
 
     try testing.expectFmt(
         "holodex.net/ya/goo?null=Hopes%20and%20dreams&int=0&str=hololive%20is%20an%20idol%20group%20like%20AKB48&list=&enum=sleepingTogether&%E6%97%A5%E6%9C%AC%E8%AA%9E%F0%9F%99%83=%E9%87%8F%E5%AD%90%E3%83%81%E3%82%AD%E3%83%B3%E3%82%B9%E3%83%BC%E3%83%97%E3%82%B0%E3%83%A9%E3%82%B9%E3%83%93%E3%83%83%E3%82%B0%E3%83%81%E3%83%A5%E3%83%B3%E3%82%B0%E3%82%B9%E3%80%80%F0%9F%8F%83%F0%9F%92%A8%F0%9F%90%89",
-        "holodex.net/ya/goo{}",
+        "holodex.net/ya/goo?{}",
         .{formatQuery(&TestQuery{
             .null = "Hopes and dreams",
             .int = 0,
