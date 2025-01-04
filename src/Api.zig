@@ -35,6 +35,9 @@ pub const FetchError = error{
     /// should be used.
     InvalidJsonResponse,
     OutOfMemory,
+    /// The response exceeded the maximum size allowed by
+    /// `FetchOptions.max_response_size`.
+    ResponseTooLarge,
     /// There was an error loading the TLS certificate bundle.
     TlsCertificateBundleLoadFailure,
     /// There usually isn't anything the user can do about this error, as they
@@ -89,6 +92,17 @@ pub fn deinit(self: *Self) void {
     self.client.deinit();
 }
 
+pub const FetchOptions = struct {
+    /// The maximum size of the response body in bytes. If the response exceeds
+    /// this size, `FetchError.ResponseTooLarge` will be returned.
+    max_response_size: usize = 8 * 1024 * 1024, // Most responses are a few KiB, 8 MiB should be enough
+    /// The behavior to use when a duplicate field is encountered in the JSON
+    /// response.
+    json_duplicate_field_behavior: meta.fieldInfo(json.ParseOptions, .duplicate_field_behavior).type = .@"error",
+    /// Whether to ignore unknown fields in the JSON response.
+    json_ignore_unknown_fields: bool = true,
+};
+
 /// Perform a one-shot request to the URL.
 /// Returns an error if the response status is not 200 OK.
 pub fn fetch(
@@ -99,6 +113,7 @@ pub fn fetch(
     path: []const u8,
     query: anytype,
     payload: anytype,
+    options: FetchOptions,
 ) FetchError!json.Parsed(Response) {
     var uri = self.base_uri;
     uri.path.percent_encoded = try fmt.allocPrint(
@@ -118,7 +133,7 @@ pub fn fetch(
     defer res_buffer.deinit();
     const status = (self.client.fetch(.{
         .response_storage = .{ .dynamic = &res_buffer },
-        .max_append_size = std.math.maxInt(usize), // No limit, `OutOfMemory` will be returned if we run out of memory
+        .max_append_size = options.max_response_size,
 
         .location = .{ .uri = uri },
         .method = method,
@@ -129,7 +144,7 @@ pub fn fetch(
             .value = self.api_key,
         }},
     }) catch |err| switch (err) {
-        // The arguments passed into `fetch` means that no code paths lead to these errors
+        // The arguments passed into `client.fetch` means that no code paths lead to these errors
         fmt.ParseIntError.Overflow,
         fmt.ParseIntError.InvalidCharacter,
         Uri.ParseError.InvalidFormat,
@@ -143,7 +158,6 @@ pub fn fetch(
         http.Client.Request.ReadError.InvalidTrailers,
         http.Client.Request.FinishError.MessageNotCompleted,
         http.Client.Response.ParseError.HttpConnectionHeaderUnsupported,
-        error.StreamTooLong, // `max_append_size` is set to `std.math.maxInt(usize)`
         => unreachable,
         // These errors should be returned
         http.Client.ConnectTcpError.ConnectionRefused,
@@ -158,6 +172,7 @@ pub fn fetch(
         http.Client.ConnectTcpError.TlsInitializationFailed,
         error.OutOfMemory,
         => return @as(FetchError, @errorCast(err)),
+        error.StreamTooLong => return FetchError.ResponseTooLarge,
         http.Client.RequestError.CertificateBundleLoadFailure => return FetchError.TlsCertificateBundleLoadFailure,
         // Group other errors into `UnexpectedFetchFailure`. There usually isn't
         // anything the user can do about these errors, as they arise from a
@@ -194,7 +209,11 @@ pub fn fetch(
         Response,
         allocator,
         res_buffer.items,
-        .{ .allocate = .alloc_always, .ignore_unknown_fields = true },
+        .{
+            .allocate = .alloc_always,
+            .ignore_unknown_fields = options.json_ignore_unknown_fields,
+            .duplicate_field_behavior = options.json_duplicate_field_behavior,
+        },
     ) catch |err| switch (err) {
         error.OutOfMemory => error.OutOfMemory,
         else => error.InvalidJsonResponse,
@@ -213,6 +232,7 @@ pub fn pager(
         .Pointer => |info| @typeInfo(info.child).Fn.params[2].type.?,
         else => @compileError("`apiFn` must be a function or a function pointer."),
     },
+    options: FetchOptions,
 ) Pager(Response, @TypeOf(query)) {
     return Pager(Response, @TypeOf(query)){
         .allocator = allocator,
@@ -223,6 +243,7 @@ pub fn pager(
             else => @compileError("`apiFn` must be a function or a function pointer."),
         },
         .query = query,
+        .options = options,
     };
 }
 
@@ -246,6 +267,7 @@ pub fn listChannels(
     self: *Self,
     allocator: Allocator,
     options: ListChannelsOptions,
+    fetch_options: FetchOptions,
 ) FetchError!json.Parsed([]Channel) {
     assert(options.limit <= 50);
     return try self.fetch(
@@ -255,5 +277,6 @@ pub fn listChannels(
         "/channels",
         options,
         null,
+        fetch_options,
     );
 }

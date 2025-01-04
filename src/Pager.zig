@@ -12,8 +12,9 @@ pub fn Pager(comptime Response: type, comptime Query: type) type {
     return struct {
         allocator: Allocator,
         api: *Api,
-        apiFn: *const fn (*Api, Allocator, Query) anyerror!json.Parsed([]Response),
+        apiFn: *const fn (*Api, Allocator, Query, Api.FetchOptions) anyerror!json.Parsed([]Response),
         query: Query,
+        options: Api.FetchOptions,
         responses: ?json.Parsed([]Response) = null,
         responses_index: usize = 0,
 
@@ -46,7 +47,12 @@ pub fn Pager(comptime Response: type, comptime Query: type) type {
                 }
             }
 
-            const new_responses = try self.apiFn(self.api, self.allocator, self.query);
+            const new_responses = try self.apiFn(
+                self.api,
+                self.allocator,
+                self.query,
+                self.options,
+            );
             if (self.responses) |responses| {
                 responses.deinit();
             }
@@ -68,7 +74,7 @@ test Pager {
     const apiFn = (struct {
         const MAX = 14; // Inclusive
 
-        pub fn apiFn(_: *Api, allocator: Allocator, query: Query) !json.Parsed([]T) {
+        pub fn apiFn(_: *Api, allocator: Allocator, query: Query, _: Api.FetchOptions) !json.Parsed([]T) {
             const arena = try allocator.create(std.heap.ArenaAllocator);
             arena.* = std.heap.ArenaAllocator.init(testing.allocator);
 
@@ -91,6 +97,7 @@ test Pager {
         .api = &api,
         .apiFn = apiFn,
         .query = Query{ .mul = 2, .offset = 3 },
+        .options = .{},
     };
     defer pager.deinit();
 
