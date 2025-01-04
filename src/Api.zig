@@ -8,8 +8,7 @@ const meta = std.meta;
 const Uri = std.Uri;
 
 const holodex = @import("root.zig");
-const Channel = holodex.types.Channel;
-const ChannelType = Channel.ChannelType;
+const types = holodex.types;
 const Pager = holodex.Pager;
 
 /// The API key to use for requests.
@@ -249,17 +248,17 @@ pub fn pager(
 
 pub const ListChannelsOptions = struct {
     /// Filter by type of channel. Leave null to query all.
-    type: ?ChannelType = null,
+    type: ?types.Channel.Type = null,
     /// Offset to start at.
     offset: u64 = 0,
     /// Maximum number of channels to return. Must be less than or equal to 50.
     limit: usize = 25,
     /// If not null, filter VTubers belonging to this organization.
-    org: ?holodex.Organization = null,
+    org: ?types.Organization = null,
     /// Filter by any of the included languages. Leave null to query all.
-    lang: ?[]holodex.Language = null,
+    lang: ?[]types.Language = null,
     /// Column to sort on.
-    sort: meta.FieldEnum(Channel) = .org,
+    sort: meta.FieldEnum(types.Channel) = .org,
     /// Sort order.
     order: SortOrder = .asc,
 };
@@ -268,11 +267,11 @@ pub fn listChannels(
     allocator: Allocator,
     options: ListChannelsOptions,
     fetch_options: FetchOptions,
-) FetchError!json.Parsed([]Channel) {
+) FetchError!json.Parsed([]types.Channel) {
     assert(options.limit <= 50);
 
     const parsed = try self.fetch(
-        []Channel.Json,
+        []types.Channel.Json,
         allocator,
         .GET,
         "/channels",
@@ -286,7 +285,7 @@ pub fn listChannels(
     arena.* = std.heap.ArenaAllocator.init(allocator);
     errdefer arena.deinit();
 
-    const result = try arena.allocator().alloc(Channel, parsed.value.len);
+    const result = try arena.allocator().alloc(types.Channel, parsed.value.len);
     for (parsed.value, 0..) |channel, i| {
         result[i] = channel.to(arena.allocator()) catch |err| switch (err) {
             holodex.DeepCopyError.OutOfMemory => return FetchError.OutOfMemory,
