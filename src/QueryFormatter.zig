@@ -2,49 +2,7 @@ const std = @import("std");
 const meta = std.meta;
 const testing = std.testing;
 
-fn PercentEncodeImpl(comptime Writer: type) type {
-    return struct {
-        fn isUnreserved(c: u8) bool {
-            return switch (c) {
-                'A'...'Z', 'a'...'z', '0'...'9', '-', '.', '_', '~' => true,
-                else => false,
-            };
-        }
-
-        pub fn write(context: Writer, bytes: []const u8) Writer.Error!usize {
-            try std.Uri.Component.percentEncode(context, bytes, isUnreserved);
-            return bytes.len;
-        }
-    };
-}
-
-fn percentEncodedWriter(writer: anytype) std.io.GenericWriter(
-    @TypeOf(writer),
-    @TypeOf(writer).Error,
-    PercentEncodeImpl(@TypeOf(writer)).write,
-) {
-    return .{ .context = writer };
-}
-
-fn PercentFormatImpl(comptime T: type) type {
-    return struct {
-        data: T,
-
-        pub fn format(
-            self: @This(),
-            comptime fmt: []const u8,
-            options: std.fmt.FormatOptions,
-            writer: anytype,
-        ) !void {
-            const percent_encoder = percentEncodedWriter(writer);
-            try std.fmt.formatType(self.data, fmt, options, percent_encoder, 1);
-        }
-    };
-}
-
-fn percentEncode(value: anytype) PercentFormatImpl(@TypeOf(value)) {
-    return .{ .data = value };
-}
+const percentEncode = @import("root.zig").percentEncode;
 
 /// Format a struct as a url query string.
 /// See `holodex.formatQuery` for more details.
@@ -134,7 +92,7 @@ pub fn QueryFormatter(comptime T: type) type {
 ///     bar: ?u32,
 /// };
 /// const query = Query{ .foo = "hello world", .bar = null };
-/// std.debug.print("example.com{}\n", .{ formatQuery(&query) });
+/// std.debug.print("example.com{}", .{ formatQuery(&query) });
 /// // Output: example.com?foo=hello%20world
 /// ```
 pub fn formatQuery(query: anytype) QueryFormatter(meta.Child(@TypeOf(query))) {

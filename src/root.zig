@@ -3,10 +3,12 @@ const std = @import("std");
 pub const Api = @import("Api.zig");
 pub const types = @import("types.zig");
 
+pub const Pager = @import("Pager.zig").Pager;
+
+pub const PercentEncoder = @import("url.zig").PercentEncoder;
+pub const percentEncode = @import("url.zig").percentEncode;
 pub const QueryFormatter = @import("QueryFormatter.zig").QueryFormatter;
 pub const formatQuery = @import("QueryFormatter.zig").formatQuery;
-
-pub const Pager = @import("Pager.zig").Pager;
 
 pub const Language = []const u8;
 pub const Languages = struct {
