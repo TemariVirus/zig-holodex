@@ -2,7 +2,12 @@
     .name = "zig-holodex",
     .version = "0.0.0",
     .minimum_zig_version = "0.13.0",
-    .dependencies = .{},
+    .dependencies = .{
+        .zeit = .{
+            .url = "git+https://github.com/rockorager/zeit#4bf983f28b89974bddcbde4ab87eaeffac8c625b",
+            .hash = "1220476f2bb3a90b4754cf9584649f39911e0ba52b362b36d55bef38b19d014db1fb",
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",

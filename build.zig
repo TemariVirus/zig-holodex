@@ -4,9 +4,20 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // Dependencies
+    const zeit = b.dependency("zeit", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("zeit");
+
     // Export the library
     _ = b.addModule("holodex", .{
         .root_source_file = b.path("src/root.zig"),
+        .imports = &.{
+            .{ .name = "zeit", .module = zeit },
+        },
+        .target = target,
+        .optimize = optimize,
     });
 
     // Unit tests
@@ -15,6 +26,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    lib_unit_tests.root_module.addImport("zeit", zeit);
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
     const test_step = b.step("test", "Run unit tests");

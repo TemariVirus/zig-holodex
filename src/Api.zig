@@ -270,8 +270,9 @@ pub fn listChannels(
     fetch_options: FetchOptions,
 ) FetchError!json.Parsed([]Channel) {
     assert(options.limit <= 50);
-    return try self.fetch(
-        []Channel,
+
+    const parsed = try self.fetch(
+        []Channel.Json,
         allocator,
         .GET,
         "/channels",
@@ -279,4 +280,18 @@ pub fn listChannels(
         null,
         fetch_options,
     );
+    defer parsed.deinit();
+
+    var arena = try allocator.create(std.heap.ArenaAllocator);
+    arena.* = std.heap.ArenaAllocator.init(allocator);
+    errdefer arena.deinit();
+
+    const result = try arena.allocator().alloc(Channel, parsed.value.len);
+    for (parsed.value, 0..) |channel, i| {
+        result[i] = channel.to(arena.allocator()) catch |err| switch (err) {
+            holodex.DeepCopyError.OutOfMemory => return FetchError.OutOfMemory,
+            holodex.DeepCopyError.InvalidTimestamp => return FetchError.InvalidJsonResponse,
+        };
+    }
+    return .{ .arena = arena, .value = result };
 }
