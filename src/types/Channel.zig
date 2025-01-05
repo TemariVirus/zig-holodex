@@ -56,6 +56,7 @@ crawled_at: ?types.Timestamp = null,
 comments_crawled_at: ?types.Timestamp = null,
 
 const Self = @This();
+pub const format = holodex.defaultFormat(@This());
 
 /// Type of a channel. Either a VTuber or a subber.
 pub const Type = enum {

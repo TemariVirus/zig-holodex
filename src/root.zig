@@ -4,6 +4,7 @@ const zeit = @import("zeit");
 pub const Api = @import("Api.zig");
 pub const types = @import("types.zig");
 
+pub const defaultFormat = @import("defaultFormat.zig").defaultFormat;
 pub const Pager = @import("Pager.zig").Pager;
 pub const PercentEncoder = @import("url.zig").PercentEncoder;
 pub const percentEncode = @import("url.zig").percentEncode;
