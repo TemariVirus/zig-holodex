@@ -225,37 +225,6 @@ pub fn fetch(
     };
 }
 
-/// Wrapper around `apiFn` that allows paging through the results of the API.
-/// This is meant to be used to extend the library with custom implementations
-/// of `apiFn`.
-/// `deinit` must be called on the returned pager to free the memory used by it.
-///
-/// If you just want to comsume the API, use other methods like `pageChannels`.
-pub fn pager(
-    self: *Self,
-    comptime Response: type,
-    allocator: Allocator,
-    apiFn: anytype,
-    query: switch (@typeInfo(@TypeOf(apiFn))) {
-        .Fn => |info| info.params[2].type.?,
-        .Pointer => |info| @typeInfo(info.child).Fn.params[2].type.?,
-        else => @compileError("`apiFn` must be a function or a function pointer."),
-    },
-    options: FetchOptions,
-) Pager(Response, @TypeOf(query)) {
-    return Pager(Response, @TypeOf(query)){
-        .allocator = allocator,
-        .api = self,
-        .apiFn = switch (@typeInfo(@TypeOf(apiFn))) {
-            .Fn => &apiFn,
-            .Pointer => apiFn,
-            else => @compileError("`apiFn` must be a function or a function pointer."),
-        },
-        .query = query,
-        .options = options,
-    };
-}
-
 fn convertDeepCopyError(err: holodex.DeepCopyError) FetchError {
     return switch (err) {
         holodex.DeepCopyError.OutOfMemory => return FetchError.OutOfMemory,
@@ -348,12 +317,11 @@ pub fn pageChannels(
     allocator: Allocator,
     options: ListChannelsOptions,
     fetch_options: FetchOptions,
-) Pager(types.Channel, ListChannelsOptions) {
-    return self.pager(
-        holodex.types.Channel,
-        allocator,
-        holodex.Api.listChannels,
-        options,
-        fetch_options,
-    );
+) Pager(types.Channel, ListChannelsOptions, listChannels) {
+    return Pager(types.Channel, ListChannelsOptions, listChannels){
+        .allocator = allocator,
+        .api = self,
+        .query = options,
+        .options = fetch_options,
+    };
 }

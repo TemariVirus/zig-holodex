@@ -8,11 +8,14 @@ const Api = @import("root.zig").Api;
 /// A pager that iterates over the results of a query.
 /// `Query` must be a struct that contains an `offset` field of an integer type.
 /// `deinit` must be called to free the memory used by the pager.
-pub fn Pager(comptime Response: type, comptime Query: type) type {
+pub fn Pager(
+    comptime Response: type,
+    comptime Query: type,
+    comptime apiFn: fn (*Api, Allocator, Query, Api.FetchOptions) Api.FetchError!json.Parsed([]Response),
+) type {
     return struct {
         allocator: Allocator,
         api: *Api,
-        apiFn: *const fn (*Api, Allocator, Query, Api.FetchOptions) anyerror!json.Parsed([]Response),
         query: Query,
         options: Api.FetchOptions,
         responses: ?json.Parsed([]Response) = null,
@@ -27,7 +30,7 @@ pub fn Pager(comptime Response: type, comptime Query: type) type {
         /// Return the next result, or `null` if there are no more results.
         /// The caller does not own the memory of the returned value.
         /// `deinit` must be called to free the memory used by the pager.
-        pub fn next(self: *@This()) !?Response {
+        pub fn next(self: *@This()) Api.FetchError!?Response {
             try self.tryNextPage();
             if (self.responses.?.value.len == 0) {
                 return null;
@@ -39,7 +42,7 @@ pub fn Pager(comptime Response: type, comptime Query: type) type {
 
         /// If at the end of the current page, fetch the next page.
         /// Otherwise, do nothing.
-        fn tryNextPage(self: *@This()) !void {
+        fn tryNextPage(self: *@This()) Api.FetchError!void {
             // Return if we're not at the end of the current page.
             if (self.responses) |responses| {
                 if (self.responses_index < responses.value.len) {
@@ -47,7 +50,7 @@ pub fn Pager(comptime Response: type, comptime Query: type) type {
                 }
             }
 
-            const new_responses = try self.apiFn(
+            const new_responses = try apiFn(
                 self.api,
                 self.allocator,
                 self.query,
@@ -92,10 +95,9 @@ test Pager {
 
     var api = Api.init(testing.allocator, .{ .api_key = "Bae's key" }) catch unreachable;
     defer api.deinit();
-    var pager = Pager(T, Query){
+    var pager = Pager(T, Query, apiFn){
         .allocator = testing.allocator,
         .api = &api,
-        .apiFn = apiFn,
         .query = Query{ .mul = 2, .offset = 3 },
         .options = .{},
     };
