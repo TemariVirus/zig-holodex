@@ -19,6 +19,7 @@ base_uri: Uri,
 client: http.Client,
 
 const Self = @This();
+const empty_query = (struct {}){};
 
 pub const FetchError = error{
     /// The API key used is invalid or expired.
@@ -246,6 +247,40 @@ pub fn pager(
     };
 }
 
+fn convertDeepCopyError(err: holodex.DeepCopyError) FetchError {
+    return switch (err) {
+        holodex.DeepCopyError.OutOfMemory => return FetchError.OutOfMemory,
+        holodex.DeepCopyError.InvalidTimestamp => return FetchError.InvalidJsonResponse,
+    };
+}
+
+pub fn channelInfo(
+    self: *Self,
+    allocator: Allocator,
+    id: []const u8,
+    fetch_options: FetchOptions,
+) FetchError!json.Parsed(types.Channel) {
+    const path = try fmt.allocPrint(allocator, "/channels/{s}", .{id});
+    defer allocator.free(path);
+    const parsed = try self.fetch(
+        types.Channel.Json,
+        allocator,
+        .GET,
+        path,
+        empty_query,
+        null,
+        fetch_options,
+    );
+    defer parsed.deinit();
+
+    var arena = try allocator.create(std.heap.ArenaAllocator);
+    arena.* = std.heap.ArenaAllocator.init(allocator);
+    errdefer arena.deinit();
+
+    const result = parsed.value.to(arena.allocator()) catch |err| return convertDeepCopyError(err);
+    return .{ .arena = arena, .value = result };
+}
+
 pub const ListChannelsOptions = struct {
     /// Filter by type of channel. Leave null to query all.
     type: ?types.Channel.Type = null,
@@ -287,10 +322,7 @@ pub fn listChannels(
 
     const result = try arena.allocator().alloc(types.Channel, parsed.value.len);
     for (parsed.value, 0..) |channel, i| {
-        result[i] = channel.to(arena.allocator()) catch |err| switch (err) {
-            holodex.DeepCopyError.OutOfMemory => return FetchError.OutOfMemory,
-            holodex.DeepCopyError.InvalidTimestamp => return FetchError.InvalidJsonResponse,
-        };
+        result[i] = channel.to(arena.allocator()) catch |err| return convertDeepCopyError(err);
     }
     return .{ .arena = arena, .value = result };
 }
