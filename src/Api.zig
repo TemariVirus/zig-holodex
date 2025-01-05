@@ -21,6 +21,7 @@ client: http.Client,
 const Self = @This();
 const empty_query = (struct {}){};
 
+/// Errors that can occur when fetching data from the API.
 pub const FetchError = error{
     /// The API key used is invalid or expired.
     BadApiKey,
@@ -46,6 +47,7 @@ pub const FetchError = error{
     UnexpectedFetchFailure,
 } || http.Client.ConnectTcpError;
 
+/// The order to sort results in.
 pub const SortOrder = enum {
     asc,
     desc,
@@ -103,8 +105,11 @@ pub const FetchOptions = struct {
     json_ignore_unknown_fields: bool = true,
 };
 
-/// Perform a one-shot request to the URL.
+/// Helper function to fetch data from the API and parse it as JSON.
 /// Returns an error if the response status is not 200 OK.
+///
+/// It is recommended to use the more specific methods like `channelInfo`
+/// instead of calling this method directly.
 pub fn fetch(
     self: *Self,
     comptime Response: type,
@@ -220,8 +225,12 @@ pub fn fetch(
     };
 }
 
-/// Return a pager that iterates over the results of a query.
-/// `deinit` must be called to free the memory used by the pager.
+/// Wrapper around `apiFn` that allows paging through the results of the API.
+/// This is meant to be used to extend the library with custom implementations
+/// of `apiFn`.
+/// `deinit` must be called on the returned pager to free the memory used by it.
+///
+/// If you just want to comsume the API, use other methods like `pageChannels`.
 pub fn pager(
     self: *Self,
     comptime Response: type,
@@ -254,6 +263,8 @@ fn convertDeepCopyError(err: holodex.DeepCopyError) FetchError {
     };
 }
 
+/// Fetch information about a YouTube channel. This corresponds to the
+/// `/channels/{channelId}` endpoint.
 pub fn channelInfo(
     self: *Self,
     allocator: Allocator,
@@ -297,6 +308,9 @@ pub const ListChannelsOptions = struct {
     /// Sort order.
     order: SortOrder = .asc,
 };
+
+/// List channels that match the given options. This corresponds to the
+/// `/channels` endpoint.
 pub fn listChannels(
     self: *Self,
     allocator: Allocator,
@@ -325,4 +339,21 @@ pub fn listChannels(
         result[i] = channel.to(arena.allocator()) catch |err| return convertDeepCopyError(err);
     }
     return .{ .arena = arena, .value = result };
+}
+
+/// Create a pager that iterates over the results of `Api.listChannels`.
+/// `deinit` must be called on the returned pager to free the memory used by it.
+pub fn pageChannels(
+    self: *Self,
+    allocator: Allocator,
+    options: ListChannelsOptions,
+    fetch_options: FetchOptions,
+) Pager(types.Channel, ListChannelsOptions) {
+    return self.pager(
+        holodex.types.Channel,
+        allocator,
+        holodex.Api.listChannels,
+        options,
+        fetch_options,
+    );
 }
