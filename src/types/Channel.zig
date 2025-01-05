@@ -1,6 +1,6 @@
 const std = @import("std");
-const fmt = std.fmt;
 const zeit = @import("zeit");
+
 const holodex = @import("../root.zig");
 const types = holodex.types;
 
@@ -35,11 +35,11 @@ clip_count: ?u64 = null,
 /// Primary language of the channel.
 lang: ?types.Language = null,
 /// When the channel was created.
-published_at: ?zeit.Instant = null,
+published_at: ?types.Timestamp = null,
 /// When the channel was added to holodex.
-created_at: ?zeit.Instant = null,
+created_at: ?types.Timestamp = null,
 /// When the channel was last updated in holodex.
-updated_at: ?zeit.Instant = null,
+updated_at: ?types.Timestamp = null,
 /// Whether the channel is currently active or not.
 inactive: bool,
 /// Description of the channel.
@@ -51,9 +51,9 @@ yt_handle: ?[]const []const u8 = null,
 /// A list of the channel's names in chronological order.
 yt_name_history: ?[]const []const u8 = null,
 /// When the channel was last crawled.
-crawled_at: ?zeit.Instant = null,
+crawled_at: ?types.Timestamp = null,
 /// When the channel's comments were last crawled.
-comments_crawled_at: ?zeit.Instant = null,
+comments_crawled_at: ?types.Timestamp = null,
 
 const Self = @This();
 

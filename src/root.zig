@@ -12,10 +12,11 @@ pub const formatQuery = @import("QueryFormatter.zig").formatQuery;
 
 pub const DeepCopyError = error{InvalidTimestamp} || std.mem.Allocator.Error;
 
-/// Parse a timestamp in ISO 8601 format, in the utc+0 timezone.
-pub fn parseTimestamp(timestamp: ?[]const u8) error{InvalidTimestamp}!?zeit.Instant {
+/// Parse a timestamp in ISO 8601 format
+pub fn parseTimestamp(timestamp: ?[]const u8) error{InvalidTimestamp}!?types.Timestamp {
     return if (timestamp) |tp|
-        zeit.instant(.{ .source = .{ .iso8601 = tp } }) catch return error.InvalidTimestamp
+        types.Timestamp.fromInstant(zeit.instant(.{ .source = .{ .iso8601 = tp } }) catch
+            return error.InvalidTimestamp)
     else
         null;
 }

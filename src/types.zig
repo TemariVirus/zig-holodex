@@ -1,3 +1,6 @@
+const std = @import("std");
+const zeit = @import("zeit");
+
 pub const Channel = @import("types/Channel.zig");
 
 /// A language code.
@@ -11,6 +14,34 @@ pub const Languages = struct {
     pub const korean: Language = "ko";
     pub const russian: Language = "ru";
     pub const spanish: Language = "es";
+};
+
+/// A UNIX timestamp.
+pub const Timestamp = struct {
+    /// The number of seconds since the UNIX epoch (midnight UTC, January 1, 1970).
+    seconds: i64,
+
+    pub fn fromInstant(instant: zeit.Instant) Timestamp {
+        return .{ .seconds = instant.unixTimestamp() };
+    }
+
+    pub fn toInstant(self: Timestamp) zeit.Instant {
+        return zeit.instant(.{
+            .source = .{ .unix_timestamp = self.seconds },
+            .timezone = &zeit.utc,
+        }) catch unreachable;
+    }
+
+    pub fn format(self: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: std.io.AnyWriter) !void {
+        self.toInstant().time().strftime(writer, "%Y-%m-%dT%H:%M:%SZ") catch |err| switch (err) {
+            error.InvalidFormat,
+            error.Overflow,
+            error.UnsupportedSpecifier,
+            error.UnknownSpecifier,
+            => unreachable,
+            else => return err,
+        };
+    }
 };
 
 /// A topic tag.
