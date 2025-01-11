@@ -19,6 +19,31 @@ pub const Languages = struct {
     pub const spanish: Language = "es";
 };
 
+/// A duration of time, in seconds.
+pub const Duration = enum(u32) {
+    _,
+
+    pub fn seconds(self: Duration) u32 {
+        return @intFromEnum(self);
+    }
+
+    pub fn fromSeconds(s: u32) Duration {
+        return @enumFromInt(s);
+    }
+
+    pub fn format(self: Duration, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        try std.fmt.fmtDuration(self.seconds() * std.time.ns_per_s).format(fmt, options, writer);
+    }
+
+    pub fn add(self: Duration, other: Duration) Duration {
+        return Duration.fromSeconds(self.seconds() + other.seconds());
+    }
+
+    pub fn sub(self: Duration, other: Duration) Duration {
+        return Duration.fromSeconds(self.seconds() - other.seconds());
+    }
+};
+
 /// A UNIX timestamp.
 pub const Timestamp = struct {
     /// The number of seconds since the UNIX epoch (midnight UTC, January 1, 1970).
@@ -35,7 +60,7 @@ pub const Timestamp = struct {
         }) catch unreachable;
     }
 
-    pub fn format(self: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: std.io.AnyWriter) !void {
+    pub fn format(self: Timestamp, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         self.toInstant().time().strftime(writer, "%Y-%m-%dT%H:%M:%SZ") catch |err| switch (err) {
             error.InvalidFormat,
             error.Overflow,
@@ -44,6 +69,14 @@ pub const Timestamp = struct {
             => unreachable,
             else => return err,
         };
+    }
+
+    pub fn add(self: Timestamp, duration: Duration) Timestamp {
+        return .{ .seconds = self.seconds + @as(i64, duration.seconds()) };
+    }
+
+    pub fn sub(self: Timestamp, duration: Duration) Timestamp {
+        return .{ .seconds = self.seconds - @as(i64, duration.seconds()) };
     }
 };
 
