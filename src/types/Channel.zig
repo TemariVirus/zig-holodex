@@ -92,9 +92,9 @@ pub const Json = struct {
     crawled_at: ?[]const u8 = null,
     comments_crawled_at: ?[]const u8 = null,
 
-    /// This function leaks memory when returning an error. Use an arena allocator
-    /// to free memory properly.
-    pub fn to(self: @This(), allocator: std.mem.Allocator) holodex.DeepCopyError!Self {
+    /// Convert to a `Channel`. This function leaks memory when returning an error.
+    /// Use an arena allocator to free memory properly.
+    pub fn to(self: @This(), allocator: std.mem.Allocator) types.JsonConversionError!Self {
         return .{
             .id = try holodex.deepCopy(allocator, self.id),
             .name = try holodex.deepCopy(allocator, self.name),

@@ -3,6 +3,9 @@ const zeit = @import("zeit");
 
 pub const Channel = @import("types/Channel.zig");
 
+/// Errors that can occur when converting a JSON type to its corresponding type.
+pub const JsonConversionError = error{InvalidTimestamp} || std.mem.Allocator.Error;
+
 /// A language code.
 pub const Language = []const u8;
 pub const Languages = struct {
@@ -59,7 +62,7 @@ pub const Organizations = struct {
 pub const Group = []const u8;
 pub const Groups = struct {
     pub const official: Group = "Official";
-    pub const misc: Group = "Misc";
+    pub const miscellanous: Group = "Misc";
     pub const holo_n: Group = "holo-n";
 
     pub const hololive_jp_gen_0: Group = "0th Generation";

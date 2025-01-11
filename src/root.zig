@@ -11,8 +11,6 @@ pub const percentEncode = @import("url.zig").percentEncode;
 pub const QueryFormatter = @import("QueryFormatter.zig").QueryFormatter;
 pub const formatQuery = @import("QueryFormatter.zig").formatQuery;
 
-pub const DeepCopyError = error{InvalidTimestamp} || std.mem.Allocator.Error;
-
 /// Parse a timestamp in ISO 8601 format
 pub fn parseTimestamp(timestamp: ?[]const u8) error{InvalidTimestamp}!?types.Timestamp {
     return if (timestamp) |tp|

@@ -225,10 +225,10 @@ pub fn fetch(
     };
 }
 
-fn convertDeepCopyError(err: holodex.DeepCopyError) FetchError {
+fn toFetchError(err: types.JsonConversionError) FetchError {
     return switch (err) {
-        holodex.DeepCopyError.OutOfMemory => return FetchError.OutOfMemory,
-        holodex.DeepCopyError.InvalidTimestamp => return FetchError.InvalidJsonResponse,
+        types.JsonConversionError.OutOfMemory => return FetchError.OutOfMemory,
+        types.JsonConversionError.InvalidTimestamp => return FetchError.InvalidJsonResponse,
     };
 }
 
@@ -257,7 +257,7 @@ pub fn channelInfo(
     arena.* = std.heap.ArenaAllocator.init(allocator);
     errdefer arena.deinit();
 
-    const result = parsed.value.to(arena.allocator()) catch |err| return convertDeepCopyError(err);
+    const result = parsed.value.to(arena.allocator()) catch |err| return toFetchError(err);
     return .{ .arena = arena, .value = result };
 }
 
@@ -305,7 +305,7 @@ pub fn listChannels(
 
     const result = try arena.allocator().alloc(types.Channel, parsed.value.len);
     for (parsed.value, 0..) |channel, i| {
-        result[i] = channel.to(arena.allocator()) catch |err| return convertDeepCopyError(err);
+        result[i] = channel.to(arena.allocator()) catch |err| return toFetchError(err);
     }
     return .{ .arena = arena, .value = result };
 }
