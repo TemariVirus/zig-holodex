@@ -60,8 +60,13 @@ pub const Timestamp = struct {
         }) catch unreachable;
     }
 
-    pub fn format(self: Timestamp, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
-        self.toInstant().time().strftime(writer, "%Y-%m-%dT%H:%M:%SZ") catch |err| switch (err) {
+    pub fn format(self: Timestamp, comptime _: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        // Worst case: "-XXXXXXXXXXXX-XX-XXTXX:XX:XXZ"
+        var buf: [29]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        const buf_writer = fbs.writer();
+
+        self.toInstant().time().strftime(buf_writer, "%Y-%m-%dT%H:%M:%SZ") catch |err| switch (err) {
             error.InvalidFormat,
             error.Overflow,
             error.UnsupportedSpecifier,
@@ -69,6 +74,8 @@ pub const Timestamp = struct {
             => unreachable,
             else => return err,
         };
+
+        try std.fmt.formatBuf(fbs.getWritten(), options, writer);
     }
 
     pub fn add(self: Timestamp, duration: Duration) Timestamp {
