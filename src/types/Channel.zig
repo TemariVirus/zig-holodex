@@ -25,13 +25,13 @@ twitter: ?[]const u8 = null,
 /// The channel's Twitch handle. Does not include the initial `@`.
 twitch: ?[]const u8 = null,
 /// Number of videos the channel has uploaded.
-video_count: ?u64 = null,
+video_count: ?u32 = null,
 /// Number of subscribers the channel has.
 subscriber_count: ?u64 = null,
 /// Number of views the channel has.
-viewer_count: ?u64 = null,
+view_count: ?u64 = null,
 /// Number of clips of the channel. `0` if the channel is a subber.
-clip_count: ?u64 = null,
+clip_count: ?u32 = null,
 /// Primary language of the channel.
 lang: ?types.Language = null,
 /// When the channel was created.
@@ -76,10 +76,10 @@ pub const Json = struct {
     banner: ?[]const u8 = null,
     twitter: ?[]const u8 = null,
     twitch: ?[]const u8 = null,
-    video_count: ?u64 = null,
+    video_count: ?u32 = null,
     subscriber_count: ?u64 = null,
-    viewer_count: ?u64 = null,
-    clip_count: ?u64 = null,
+    view_count: ?u64 = null,
+    clip_count: ?u32 = null,
     lang: ?[]const u8 = null,
     published_at: ?[]const u8 = null,
     created_at: ?[]const u8 = null,
@@ -106,9 +106,9 @@ pub const Json = struct {
             .banner = try holodex.deepCopy(allocator, self.banner),
             .twitter = try holodex.deepCopy(allocator, self.twitter),
             .twitch = try holodex.deepCopy(allocator, self.twitch),
-            .video_count = self.viewer_count,
+            .video_count = self.video_count,
             .subscriber_count = self.subscriber_count,
-            .viewer_count = self.viewer_count,
+            .view_count = self.view_count,
             .clip_count = self.clip_count,
             .lang = try holodex.deepCopy(allocator, self.lang),
             .published_at = try holodex.parseTimestamp(self.published_at),
