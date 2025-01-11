@@ -4,8 +4,8 @@
     .minimum_zig_version = "0.13.0",
     .dependencies = .{
         .zeit = .{
-            .url = "git+https://github.com/rockorager/zeit#4bf983f28b89974bddcbde4ab87eaeffac8c625b",
-            .hash = "1220476f2bb3a90b4754cf9584649f39911e0ba52b362b36d55bef38b19d014db1fb",
+            .url = "git+https://github.com/rockorager/zeit#v0.5.0",
+            .hash = "122022233835adc719535a8e7cefdd2902a67bbfb7ef198441ca9ce89c0593f488c2",
         },
     },
     .paths = .{
