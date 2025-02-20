@@ -60,6 +60,14 @@ pub const Timestamp = struct {
         }) catch unreachable;
     }
 
+    /// Parse a timestamp in the ISO 8601 format
+    pub fn parseISO(iso8601: []const u8) error{InvalidTimestamp}!?Timestamp {
+        const instant = zeit.instant(.{
+            .source = .{ .iso8601 = iso8601 },
+        }) catch return error.InvalidTimestamp;
+        return fromInstant(instant);
+    }
+
     pub fn format(self: Timestamp, comptime _: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         // Worst case: "-XXXXXXXXXXXX-XX-XXTXX:XX:XXZ"
         var buf: [29]u8 = undefined;
