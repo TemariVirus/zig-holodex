@@ -220,8 +220,8 @@ pub fn fetch(
             .duplicate_field_behavior = options.json_duplicate_field_behavior,
         },
     ) catch |err| switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        else => error.InvalidJsonResponse,
+        error.OutOfMemory => FetchError.OutOfMemory,
+        else => FetchError.InvalidJsonResponse,
     };
 }
 
@@ -239,11 +239,11 @@ pub fn channelInfo(
     allocator: Allocator,
     id: []const u8,
     fetch_options: FetchOptions,
-) FetchError!json.Parsed(datatypes.Channel) {
+) FetchError!json.Parsed(datatypes.ChannelFull) {
     const path = try fmt.allocPrint(allocator, "/channels/{s}", .{id});
     defer allocator.free(path);
     const parsed = try self.fetch(
-        datatypes.Channel.Json,
+        datatypes.ChannelFull.Json,
         allocator,
         .GET,
         path,
@@ -261,9 +261,10 @@ pub fn channelInfo(
     return .{ .arena = arena, .value = result };
 }
 
+/// Query options for `Api.listChannels`.
 pub const ListChannelsOptions = struct {
     /// Filter by type of channel. Leave null to query all.
-    type: ?datatypes.Channel.Type = null,
+    type: ?datatypes.ChannelFull.Type = null,
     /// Offset to start at.
     offset: u64 = 0,
     /// Maximum number of channels to return. Must be less than or equal to 50.
@@ -271,25 +272,26 @@ pub const ListChannelsOptions = struct {
     /// If not null, filter VTubers belonging to this organization.
     org: ?datatypes.Organization = null,
     /// Filter by any of the included languages. Leave null to query all.
-    lang: ?[]datatypes.Language = null,
+    lang: ?[]const datatypes.Language = null,
     /// Column to sort on.
-    sort: meta.FieldEnum(datatypes.Channel) = .org,
+    sort: meta.FieldEnum(datatypes.ChannelFull) = .org,
     /// Sort order.
     order: SortOrder = .asc,
 };
 
 /// List channels that match the given options. This corresponds to the
-/// `/channels` endpoint.
+/// `/channels` endpoint. Use `Api.pageChannels` to page through the results
+/// instead.
 pub fn listChannels(
     self: *Self,
     allocator: Allocator,
     options: ListChannelsOptions,
     fetch_options: FetchOptions,
-) FetchError!json.Parsed([]datatypes.Channel) {
+) FetchError!json.Parsed([]datatypes.ChannelFull) {
     assert(options.limit <= 50);
 
     const parsed = try self.fetch(
-        []datatypes.Channel.Json,
+        []datatypes.ChannelFull.Json,
         allocator,
         .GET,
         "/channels",
@@ -303,7 +305,7 @@ pub fn listChannels(
     arena.* = std.heap.ArenaAllocator.init(allocator);
     errdefer arena.deinit();
 
-    const result = try arena.allocator().alloc(datatypes.Channel, parsed.value.len);
+    const result = try arena.allocator().alloc(datatypes.ChannelFull, parsed.value.len);
     for (parsed.value, 0..) |channel, i| {
         result[i] = channel.to(arena.allocator()) catch |err| return toFetchError(err);
     }
@@ -317,8 +319,8 @@ pub fn pageChannels(
     allocator: Allocator,
     options: ListChannelsOptions,
     fetch_options: FetchOptions,
-) Pager(datatypes.Channel, ListChannelsOptions, listChannels) {
-    return Pager(datatypes.Channel, ListChannelsOptions, listChannels){
+) Pager(datatypes.ChannelFull, ListChannelsOptions, listChannels) {
+    return Pager(datatypes.ChannelFull, ListChannelsOptions, listChannels){
         .allocator = allocator,
         .api = self,
         .query = options,
