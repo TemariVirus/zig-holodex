@@ -274,7 +274,7 @@ pub const ListChannelsOptions = struct {
     /// Filter by any of the included languages. Leave null to query all.
     lang: ?[]const datatypes.Language = null,
     /// Column to sort on.
-    sort: meta.FieldEnum(datatypes.ChannelFull) = .org,
+    sort: meta.FieldEnum(datatypes.Channel) = .org,
     /// Sort order.
     order: SortOrder = .asc,
 };
@@ -287,11 +287,11 @@ pub fn listChannels(
     allocator: Allocator,
     options: ListChannelsOptions,
     fetch_options: FetchOptions,
-) FetchError!json.Parsed([]datatypes.ChannelFull) {
+) FetchError!json.Parsed([]datatypes.Channel) {
     assert(options.limit <= 50);
 
     const parsed = try self.fetch(
-        []datatypes.ChannelFull.Json,
+        []datatypes.Channel.Json,
         allocator,
         .GET,
         "/channels",
@@ -305,7 +305,7 @@ pub fn listChannels(
     arena.* = std.heap.ArenaAllocator.init(allocator);
     errdefer arena.deinit();
 
-    const result = try arena.allocator().alloc(datatypes.ChannelFull, parsed.value.len);
+    const result = try arena.allocator().alloc(datatypes.Channel, parsed.value.len);
     for (parsed.value, 0..) |channel, i| {
         result[i] = channel.to(arena.allocator()) catch |err| return toFetchError(err);
     }
@@ -319,8 +319,8 @@ pub fn pageChannels(
     allocator: Allocator,
     options: ListChannelsOptions,
     fetch_options: FetchOptions,
-) Pager(datatypes.ChannelFull, ListChannelsOptions, listChannels) {
-    return Pager(datatypes.ChannelFull, ListChannelsOptions, listChannels){
+) Pager(datatypes.Channel, ListChannelsOptions, listChannels) {
+    return Pager(datatypes.Channel, ListChannelsOptions, listChannels){
         .allocator = allocator,
         .api = self,
         .query = options,
