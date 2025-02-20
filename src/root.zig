@@ -2,7 +2,7 @@ const std = @import("std");
 const zeit = @import("zeit");
 
 pub const Api = @import("Api.zig");
-pub const types = @import("types.zig");
+pub const datatypes = @import("datatypes.zig");
 
 pub const defaultFormat = @import("defaultFormat.zig").defaultFormat;
 pub const Pager = @import("Pager.zig").Pager;
@@ -12,9 +12,9 @@ pub const QueryFormatter = @import("QueryFormatter.zig").QueryFormatter;
 pub const formatQuery = @import("QueryFormatter.zig").formatQuery;
 
 /// Parse a timestamp in ISO 8601 format
-pub fn parseTimestamp(timestamp: ?[]const u8) error{InvalidTimestamp}!?types.Timestamp {
+pub fn parseTimestamp(timestamp: ?[]const u8) error{InvalidTimestamp}!?datatypes.Timestamp {
     return if (timestamp) |tp|
-        types.Timestamp.fromInstant(zeit.instant(.{ .source = .{ .iso8601 = tp } }) catch
+        datatypes.Timestamp.fromInstant(zeit.instant(.{ .source = .{ .iso8601 = tp } }) catch
             return error.InvalidTimestamp)
     else
         null;

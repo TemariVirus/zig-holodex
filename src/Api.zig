@@ -8,7 +8,7 @@ const meta = std.meta;
 const Uri = std.Uri;
 
 const holodex = @import("root.zig");
-const types = holodex.types;
+const datatypes = holodex.datatypes;
 const Pager = holodex.Pager;
 
 /// The API key to use for requests.
@@ -225,10 +225,10 @@ pub fn fetch(
     };
 }
 
-fn toFetchError(err: types.JsonConversionError) FetchError {
+fn toFetchError(err: datatypes.JsonConversionError) FetchError {
     return switch (err) {
-        types.JsonConversionError.OutOfMemory => return FetchError.OutOfMemory,
-        types.JsonConversionError.InvalidTimestamp => return FetchError.InvalidJsonResponse,
+        datatypes.JsonConversionError.OutOfMemory => return FetchError.OutOfMemory,
+        datatypes.JsonConversionError.InvalidTimestamp => return FetchError.InvalidJsonResponse,
     };
 }
 
@@ -239,11 +239,11 @@ pub fn channelInfo(
     allocator: Allocator,
     id: []const u8,
     fetch_options: FetchOptions,
-) FetchError!json.Parsed(types.Channel) {
+) FetchError!json.Parsed(datatypes.Channel) {
     const path = try fmt.allocPrint(allocator, "/channels/{s}", .{id});
     defer allocator.free(path);
     const parsed = try self.fetch(
-        types.Channel.Json,
+        datatypes.Channel.Json,
         allocator,
         .GET,
         path,
@@ -263,17 +263,17 @@ pub fn channelInfo(
 
 pub const ListChannelsOptions = struct {
     /// Filter by type of channel. Leave null to query all.
-    type: ?types.Channel.Type = null,
+    type: ?datatypes.Channel.Type = null,
     /// Offset to start at.
     offset: u64 = 0,
     /// Maximum number of channels to return. Must be less than or equal to 50.
     limit: usize = 25,
     /// If not null, filter VTubers belonging to this organization.
-    org: ?types.Organization = null,
+    org: ?datatypes.Organization = null,
     /// Filter by any of the included languages. Leave null to query all.
-    lang: ?[]types.Language = null,
+    lang: ?[]datatypes.Language = null,
     /// Column to sort on.
-    sort: meta.FieldEnum(types.Channel) = .org,
+    sort: meta.FieldEnum(datatypes.Channel) = .org,
     /// Sort order.
     order: SortOrder = .asc,
 };
@@ -285,11 +285,11 @@ pub fn listChannels(
     allocator: Allocator,
     options: ListChannelsOptions,
     fetch_options: FetchOptions,
-) FetchError!json.Parsed([]types.Channel) {
+) FetchError!json.Parsed([]datatypes.Channel) {
     assert(options.limit <= 50);
 
     const parsed = try self.fetch(
-        []types.Channel.Json,
+        []datatypes.Channel.Json,
         allocator,
         .GET,
         "/channels",
@@ -303,7 +303,7 @@ pub fn listChannels(
     arena.* = std.heap.ArenaAllocator.init(allocator);
     errdefer arena.deinit();
 
-    const result = try arena.allocator().alloc(types.Channel, parsed.value.len);
+    const result = try arena.allocator().alloc(datatypes.Channel, parsed.value.len);
     for (parsed.value, 0..) |channel, i| {
         result[i] = channel.to(arena.allocator()) catch |err| return toFetchError(err);
     }
@@ -317,8 +317,8 @@ pub fn pageChannels(
     allocator: Allocator,
     options: ListChannelsOptions,
     fetch_options: FetchOptions,
-) Pager(types.Channel, ListChannelsOptions, listChannels) {
-    return Pager(types.Channel, ListChannelsOptions, listChannels){
+) Pager(datatypes.Channel, ListChannelsOptions, listChannels) {
+    return Pager(datatypes.Channel, ListChannelsOptions, listChannels){
         .allocator = allocator,
         .api = self,
         .query = options,
