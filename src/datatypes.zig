@@ -19,6 +19,46 @@ pub const Languages = struct {
     pub const spanish: Language = "es";
 };
 
+/// An offset from the start of a video, in seconds.
+pub const VideoOffset = enum(u32) {
+    _,
+
+    pub fn seconds(self: VideoOffset) u32 {
+        return @intFromEnum(self);
+    }
+
+    pub fn fromSeconds(s: u32) VideoOffset {
+        return @enumFromInt(s);
+    }
+
+    pub fn format(self: VideoOffset, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        if (std.mem.eql(u8, fmt, "raw")) {
+            try writer.print("{d}", .{self.seconds()});
+            return;
+        }
+
+        // Use YouTube format: DDD:HH:MM:SS
+        const d = self.seconds() / (24 * 60 * 60);
+        const h = (self.seconds() / (60 * 60)) % 24;
+        const m = (self.seconds() / 60) % 60;
+        const s = self.seconds() % 60;
+
+        // Worst case: "XXXXX:XX:XX:XX"
+        var buf: [14]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        const buf_writer = fbs.writer();
+        if (d > 0) {
+            try buf_writer.print("{d}:{d:0>2}:{d:0>2}:{d:0>2}", .{ d, h, m, s });
+        } else if (h > 1) {
+            try buf_writer.print("{d}:{d:0>2}:{d:0>2}", .{ h, m, s });
+        } else {
+            try buf_writer.print("{d}:{d:0>2}", .{ m, s });
+        }
+
+        try std.fmt.formatBuf(fbs.getWritten(), options, writer);
+    }
+};
+
 /// A duration of time, in seconds.
 pub const Duration = enum(u32) {
     _,
@@ -32,7 +72,7 @@ pub const Duration = enum(u32) {
     }
 
     pub fn format(self: Duration, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        try std.fmt.fmtDuration(self.seconds() * std.time.ns_per_s).format(fmt, options, writer);
+        try std.fmt.fmtDuration(@as(u64, self.seconds()) * std.time.ns_per_s).format(fmt, options, writer);
     }
 
     pub fn add(self: Duration, other: Duration) Duration {
