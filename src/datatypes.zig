@@ -1,7 +1,7 @@
 const std = @import("std");
 const zeit = @import("zeit");
 
-pub const Channel = @import("types/Channel.zig");
+pub const ChannelFull = @import("types/ChannelFull.zig");
 
 /// Errors that can occur when converting a JSON type to its corresponding type.
 pub const JsonConversionError = error{InvalidTimestamp} || std.mem.Allocator.Error;
