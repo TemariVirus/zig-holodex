@@ -11,11 +11,10 @@ pub const percentEncode = @import("url.zig").percentEncode;
 pub const QueryFormatter = @import("QueryFormatter.zig").QueryFormatter;
 pub const formatQuery = @import("QueryFormatter.zig").formatQuery;
 
-/// Parse a timestamp in ISO 8601 format
-pub fn parseTimestamp(timestamp: ?[]const u8) error{InvalidTimestamp}!?datatypes.Timestamp {
+/// Parse an optional timestamp in the ISO 8601 format.
+pub fn parseOptionalTimestamp(timestamp: ?[]const u8) error{InvalidTimestamp}!?datatypes.Timestamp {
     return if (timestamp) |tp|
-        datatypes.Timestamp.fromInstant(zeit.instant(.{ .source = .{ .iso8601 = tp } }) catch
-            return error.InvalidTimestamp)
+        try datatypes.Timestamp.parseISO(tp)
     else
         null;
 }

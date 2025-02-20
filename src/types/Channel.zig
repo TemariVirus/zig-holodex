@@ -111,16 +111,16 @@ pub const Json = struct {
             .view_count = self.view_count,
             .clip_count = self.clip_count,
             .lang = try holodex.deepCopy(allocator, self.lang),
-            .published_at = try holodex.parseTimestamp(self.published_at),
-            .created_at = try holodex.parseTimestamp(self.created_at),
-            .updated_at = try holodex.parseTimestamp(self.updated_at),
+            .published_at = try holodex.parseOptionalTimestamp(self.published_at),
+            .created_at = try holodex.parseOptionalTimestamp(self.created_at),
+            .updated_at = try holodex.parseOptionalTimestamp(self.updated_at),
             .inactive = self.inactive,
             .description = try holodex.deepCopy(allocator, self.description),
             .top_topics = try holodex.deepCopy(allocator, self.top_topics),
             .yt_handle = try holodex.deepCopy(allocator, self.yt_handle),
             .yt_name_history = try holodex.deepCopy(allocator, self.yt_name_history),
-            .crawled_at = try holodex.parseTimestamp(self.crawled_at),
-            .comments_crawled_at = try holodex.parseTimestamp(self.comments_crawled_at),
+            .crawled_at = try holodex.parseOptionalTimestamp(self.crawled_at),
+            .comments_crawled_at = try holodex.parseOptionalTimestamp(self.comments_crawled_at),
         };
     }
 };
