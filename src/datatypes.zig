@@ -50,7 +50,7 @@ pub const VideoOffset = enum(u32) {
         const buf_writer = fbs.writer();
         if (d > 0) {
             try buf_writer.print("{d}:{d:0>2}:{d:0>2}:{d:0>2}", .{ d, h, m, s });
-        } else if (h > 1) {
+        } else if (h > 0) {
             try buf_writer.print("{d}:{d:0>2}:{d:0>2}", .{ h, m, s });
         } else {
             try buf_writer.print("{d}:{d:0>2}", .{ m, s });
@@ -73,6 +73,11 @@ pub const Duration = enum(u32) {
     }
 
     pub fn format(self: Duration, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        if (std.mem.eql(u8, fmt, "raw")) {
+            try writer.print("{d}", .{self.seconds()});
+            return;
+        }
+
         try std.fmt.fmtDuration(@as(u64, self.seconds()) * std.time.ns_per_s).format(fmt, options, writer);
     }
 
