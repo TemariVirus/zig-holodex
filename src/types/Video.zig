@@ -22,16 +22,16 @@ channel: struct {
     /// YouTube channel name.
     name: []const u8,
     /// English name of the channel/channel owner.
-    english_name: ?datatypes.EnglishName,
+    english_name: ?datatypes.EnglishName = null,
     /// VTuber organization the channel is part of.
-    org: ?[]const u8,
+    org: ?[]const u8 = null,
     /// URL to the channel's profile picture.
     photo: []const u8,
 },
 /// Duration of the video. `0` if the video is a stream that has not ended.
 duration: datatypes.Duration,
 /// When the video went live or became viewable.
-available_at: ?datatypes.Timestamp,
+available_at: ?datatypes.Timestamp = null,
 
 const Self = @This();
 pub const format = holodex.defaultFormat(@This(), struct {});

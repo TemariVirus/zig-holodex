@@ -25,8 +25,7 @@ const empty_query = (struct {}){};
 pub const FetchError = error{
     /// The API key used is invalid or expired.
     BadApiKey,
-    /// The requested resource was not found. This likely indicates that the
-    /// API has been updated and a newer version of this library should be used.
+    /// The requested resource was not found.
     NotFound,
     /// The rate limit has been exceeded. The user should wait before making
     /// another request.
@@ -228,7 +227,9 @@ pub fn fetch(
 fn toFetchError(err: datatypes.JsonConversionError) FetchError {
     return switch (err) {
         datatypes.JsonConversionError.OutOfMemory => return FetchError.OutOfMemory,
-        datatypes.JsonConversionError.InvalidTimestamp => return FetchError.InvalidJsonResponse,
+        datatypes.JsonConversionError.InvalidTimestamp,
+        datatypes.JsonConversionError.InvalidUuid,
+        => return FetchError.InvalidJsonResponse,
     };
 }
 
@@ -248,6 +249,62 @@ pub fn channelInfo(
         .GET,
         path,
         empty_query,
+        null,
+        fetch_options,
+    );
+    defer parsed.deinit();
+
+    var arena = try allocator.create(std.heap.ArenaAllocator);
+    arena.* = std.heap.ArenaAllocator.init(allocator);
+    errdefer arena.deinit();
+
+    const result = parsed.value.to(arena.allocator()) catch |err| return toFetchError(err);
+    return .{ .arena = arena, .value = result };
+}
+
+/// Query options for `Api.videoInfo`.
+pub const VideoInfoOptions = struct {
+    /// The YouTube video ID.
+    video_id: []const u8,
+    /// Filter channels/clips. official streams do not follow this parameter.
+    lang: ?[]const datatypes.Language = &.{datatypes.Languages.all},
+    /// Whether to include timestamp comments.
+    comments: bool = false,
+};
+/// The Holodex API version of `VideoInfoOptions`.
+const VideoInfoOptionsApi = struct {
+    /// Corresponds to the `lang` field.
+    lang: ?[]const datatypes.Language,
+    /// Corresponds to the `comments` field.
+    c: enum { @"0", @"1" },
+
+    pub fn from(options: VideoInfoOptions) VideoInfoOptionsApi {
+        return VideoInfoOptionsApi{
+            .lang = options.lang,
+            .c = switch (options.comments) {
+                false => .@"0",
+                true => .@"1",
+            },
+        };
+    }
+};
+
+/// Fetch information about a video. This corresponds to the `/videos/{videoId}`
+/// endpoint.
+pub fn videoInfo(
+    self: *Self,
+    allocator: Allocator,
+    options: VideoInfoOptions,
+    fetch_options: FetchOptions,
+) FetchError!json.Parsed(datatypes.VideoFull) {
+    const path = try fmt.allocPrint(allocator, "/videos/{s}", .{options.video_id});
+    defer allocator.free(path);
+    const parsed = try self.fetch(
+        datatypes.VideoFull.Json,
+        allocator,
+        .GET,
+        path,
+        VideoInfoOptionsApi.from(options),
         null,
         fetch_options,
     );

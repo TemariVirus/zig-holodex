@@ -7,6 +7,7 @@ pub const Song = @import("types/Song.zig");
 pub const Uuid = @import("types/Uuid.zig");
 pub const Video = @import("types/Video.zig");
 pub const VideoChannel = @import("types/VideoChannel.zig");
+pub const VideoFull = @import("types/VideoFull.zig");
 pub const Vtuber = @import("types/Vtuber.zig");
 
 /// Errors that can occur when converting a JSON type to its corresponding type.

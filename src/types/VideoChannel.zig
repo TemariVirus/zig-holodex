@@ -10,13 +10,13 @@ id: []const u8,
 /// YouTube channel name.
 name: []const u8,
 /// English name of the channel/channel owner.
-english_name: ?datatypes.EnglishName,
+english_name: ?datatypes.EnglishName = null,
 /// Type of the channel. Ether a VTuber or a subber.
 type: datatypes.ChannelFull.Type,
 /// VTuber organization the channel is part of.
-org: ?datatypes.Organization,
+org: ?datatypes.Organization = null,
 /// VTuber subgroup the channel is part of.
-group: ?datatypes.Group,
+group: ?datatypes.Group = null,
 /// URL to the channel's profile picture.
 photo: []const u8,
 /// Number of videos the channel has uploaded.
@@ -26,7 +26,7 @@ subscriber_count: u64,
 /// Number of views the channel has.
 view_count: u64,
 /// Number of clips of the channel. `0` if the channel is a subber.
-clip_count: ?u32,
+clip_count: ?u32 = null,
 
 const Self = @This();
 pub const format = holodex.defaultFormat(@This(), struct {});
@@ -43,7 +43,7 @@ pub const Json = struct {
     video_count: u32,
     subscriber_count: u64,
     view_count: u64,
-    clip_count: ?u32,
+    clip_count: ?u32 = null,
 
     /// Convert to a `VideoChannel`. This function leaks memory when returning an error.
     /// Use an arena allocator to free memory properly.
