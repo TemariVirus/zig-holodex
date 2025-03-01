@@ -40,12 +40,13 @@ pub fn Pager(
             return self.responses.?.value[self.responses_index];
         }
 
-        /// If at the end of the current page, fetch the next page.
-        /// Otherwise, do nothing.
+        /// If at the end of the current page and there are more pages, fetch
+        /// the next page. Otherwise, do nothing.
         fn tryNextPage(self: *@This()) Api.FetchError!void {
-            // Return if we're not at the end of the current page.
+            // Return if we're not at the end of the current page or there are
+            // no more pages.
             if (self.responses) |responses| {
-                if (self.responses_index < responses.value.len) {
+                if (self.responses_index < responses.value.len or responses.value.len == 0) {
                     return;
                 }
             }
