@@ -3,13 +3,14 @@ const zeit = @import("zeit");
 
 pub const Channel = @import("types/Channel.zig");
 pub const ChannelFull = @import("types/ChannelFull.zig");
+pub const Song = @import("types/Song.zig");
 pub const Uuid = @import("types/Uuid.zig");
 pub const Video = @import("types/Video.zig");
 pub const VideoChannel = @import("types/VideoChannel.zig");
 pub const Vtuber = @import("types/Vtuber.zig");
 
 /// Errors that can occur when converting a JSON type to its corresponding type.
-pub const JsonConversionError = Timestamp.ParseError || std.mem.Allocator.Error;
+pub const JsonConversionError = Timestamp.ParseError || Uuid.ParseError || std.mem.Allocator.Error;
 
 /// A language code.
 pub const Language = []const u8;
