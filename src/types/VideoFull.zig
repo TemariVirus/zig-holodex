@@ -32,7 +32,7 @@ description: ?[]const u8 = null,
 /// Songs performed in this video.
 songs: ?[]const datatypes.Song = null,
 /// Channel associated with the video.
-channel: datatypes.VideoChannel,
+channel: datatypes.VideoFullChannel,
 /// Information about the livestream. `null` if the video is not a stream.
 live_info: ?LiveInfo = null,
 /// Clips of the video.
@@ -142,7 +142,7 @@ pub const Json = struct {
     live_tl_count: ?std.json.ArrayHashMap(u32) = null,
     description: ?[]const u8 = null,
     songs: ?[]const datatypes.Song.Json = null,
-    channel: datatypes.VideoChannel.Json,
+    channel: datatypes.VideoFullChannel.Json,
 
     // Only returned when 'includes' contains 'live_info'
     start_scheduled: ?[]const u8 = null,
