@@ -48,6 +48,7 @@ fn format(
     comptime fmt: []const u8,
     options: std.fmt.FormatOptions,
     writer: anytype,
+    comptime Overwrites: type,
     max_depth: usize,
     is_root: bool,
 ) @TypeOf(writer).Error!void {
@@ -59,7 +60,7 @@ fn format(
     const is_raw = comptime mem.eql(u8, fmt, "raw");
     const raw_fmt = if (is_raw) "any" else fmt;
     if (std.meta.hasMethod(T, "format") and !is_root and !is_raw) {
-        return try value.format(fmt, options, writer);
+        return value.format(fmt, options, writer);
     }
 
     const string_writer = StringFormatter(@TypeOf(writer)){ .writer = writer };
@@ -72,7 +73,7 @@ fn format(
         .Bool => return formatBuf(if (value) "true" else "false", options, writer),
         .Optional => {
             if (value) |payload| {
-                return format(payload, fmt, options, writer, max_depth, false);
+                return format(payload, fmt, options, writer, Overwrites, max_depth, false);
             } else {
                 return formatBuf("null", options, writer);
             }
@@ -95,7 +96,7 @@ fn format(
             }
 
             try writer.writeAll("(");
-            try format(@intFromEnum(value), fmt, options, writer, max_depth, false);
+            try format(@intFromEnum(value), fmt, options, writer, struct {}, max_depth, false);
             try writer.writeAll(")");
         },
         .Union => |info| {
@@ -114,6 +115,7 @@ fn format(
                             fmt,
                             options,
                             writer,
+                            struct {},
                             max_depth - 1,
                             false,
                         );
@@ -142,12 +144,14 @@ fn format(
                         fmt,
                         options,
                         writer,
+                        struct {},
                         max_depth - 1,
                         false,
                     );
                 }
                 return writer.writeAll(" }");
             }
+
             try writer.writeAll(@typeName(T));
             if (max_depth == 0) {
                 return writer.writeAll("{ ... }");
@@ -161,14 +165,20 @@ fn format(
                 }
                 try writer.writeAll(f.name);
                 try writer.writeAll(" = ");
-                try format(@field(value, f.name), fmt, options, writer, max_depth - 1, false);
+                // Overwrite field formatting if it exists
+                if (std.meta.hasMethod(Overwrites, f.name)) {
+                    const formatFn = @field(Overwrites, f.name);
+                    try formatFn(@field(value, f.name), fmt, options, writer);
+                } else {
+                    try format(@field(value, f.name), fmt, options, writer, struct {}, max_depth - 1, false);
+                }
             }
             try writer.writeAll(" }");
         },
         .Pointer => |ptr_info| switch (ptr_info.size) {
             .One => switch (@typeInfo(ptr_info.child)) {
                 .Array, .Enum, .Union, .Struct => {
-                    return format(value.*, fmt, options, writer, max_depth, false);
+                    return format(value.*, fmt, options, writer, Overwrites, max_depth, false);
                 },
                 else => return std.fmt.format(
                     writer,
@@ -178,10 +188,10 @@ fn format(
             },
             .Many, .C => {
                 if (ptr_info.sentinel) |_| {
-                    return format(mem.span(value), fmt, options, writer, max_depth, false);
+                    return format(mem.span(value), fmt, options, writer, Overwrites, max_depth, false);
                 }
                 if (ptr_info.child == u8 and !is_raw) {
-                    return try formatBuf(mem.span(value), options, string_writer);
+                    return formatBuf(mem.span(value), options, string_writer);
                 }
                 @compileError("Non-sentinel terminated pointer types must use '*' format string");
             },
@@ -194,7 +204,7 @@ fn format(
                 }
                 try writer.writeAll("{ ");
                 for (value, 0..) |elem, i| {
-                    try format(elem, fmt, options, writer, max_depth - 1, false);
+                    try format(elem, fmt, options, writer, Overwrites, max_depth - 1, false);
                     if (i != value.len - 1) {
                         try writer.writeAll(", ");
                     }
@@ -211,7 +221,7 @@ fn format(
             }
             try writer.writeAll("{ ");
             for (value, 0..) |elem, i| {
-                try format(elem, fmt, options, writer, max_depth - 1, false);
+                try format(elem, fmt, options, writer, Overwrites, max_depth - 1, false);
                 if (i < value.len - 1) {
                     try writer.writeAll(", ");
                 }
@@ -230,8 +240,25 @@ fn format(
 
 /// Create a default format function for a type. Passing in "raw" as the format
 /// string will format the value without calling any custom format methods.
+///
+/// The `Overwrites` type is a struct that contains methods of the form:
+/// ```zig
+/// pub fn fieldName(
+///     value: @TypeOf(T.fieldName),
+///     comptime fmt: []const u8,
+///     options: std.fmt.FormatOptions,
+///     writer: anytype,
+/// ) @TypeOf(writer).Error!void {
+///     // custom formatting logic for `T.fieldName`
+/// }
+/// ```
+/// When `fieldName` matches the name of a field in `T`, the custom formatting
+/// function will be called instead of the default formatting function. This
+/// behaviour carries through optionals, pointers, slices, and arrays, but not
+/// through unions or structs.
 pub fn defaultFormat(
     comptime T: type,
+    comptime Overwrites: type,
 ) fn (T, comptime []const u8, std.fmt.FormatOptions, anytype) anyerror!void {
     return (struct {
         pub fn f(
@@ -240,7 +267,15 @@ pub fn defaultFormat(
             options: std.fmt.FormatOptions,
             writer: anytype,
         ) @TypeOf(writer).Error!void {
-            return format(value, fmt, options, writer, std.options.fmt_max_depth, true);
+            return format(
+                value,
+                fmt,
+                options,
+                writer,
+                Overwrites,
+                std.options.fmt_max_depth,
+                true,
+            );
         }
     }).f;
 }

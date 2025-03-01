@@ -57,7 +57,7 @@ crawled_at: ?datatypes.Timestamp = null,
 comments_crawled_at: ?datatypes.Timestamp = null,
 
 const Self = @This();
-pub const format = holodex.defaultFormat(@This());
+pub const format = holodex.defaultFormat(@This(), struct {});
 
 /// Type of a channel. Either a VTuber or a subber.
 pub const Type = enum {

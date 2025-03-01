@@ -14,7 +14,7 @@ english_name: ?datatypes.EnglishName = null,
 /// Type of the channel. Ether a VTuber or a subber.
 type: datatypes.ChannelFull.Type,
 /// VTuber organization the channel is part of.
-org: ?datatypes.Organization  = null,
+org: ?datatypes.Organization = null,
 /// VTuber subgroup the channel is part of.
 group: ?datatypes.Group = null,
 /// URL to the channel's profile picture.
@@ -37,7 +37,7 @@ inactive: bool,
 top_topics: ?[]const datatypes.Topic = null,
 
 const Self = @This();
-pub const format = holodex.defaultFormat(@This());
+pub const format = holodex.defaultFormat(@This(), struct {});
 
 /// The JSON representation of a `Channel`.
 pub const Json = struct {

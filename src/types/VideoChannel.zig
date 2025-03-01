@@ -29,7 +29,7 @@ view_count: u64,
 clip_count: ?u32,
 
 const Self = @This();
-pub const format = holodex.defaultFormat(@This());
+pub const format = holodex.defaultFormat(@This(), struct {});
 
 /// The JSON representation of a `VideoChannel`.
 pub const Json = struct {

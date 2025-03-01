@@ -14,7 +14,7 @@ photo: []const u8,
 lang: ?[]const u8 = null,
 
 const Self = @This();
-pub const format = holodex.defaultFormat(@This());
+pub const format = holodex.defaultFormat(@This(), struct {});
 
 // No need to include `type` field as it should always be `vtuber`
 pub const Json = struct {

@@ -34,7 +34,7 @@ duration: datatypes.Duration,
 available_at: ?datatypes.Timestamp,
 
 const Self = @This();
-pub const format = holodex.defaultFormat(@This());
+pub const format = holodex.defaultFormat(@This(), struct {});
 
 /// The JSON representation of a `Video`.
 pub const Json = struct {
