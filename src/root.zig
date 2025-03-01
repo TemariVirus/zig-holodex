@@ -32,6 +32,12 @@ pub fn deepCopy(allocator: std.mem.Allocator, src: anytype) std.mem.Allocator.Er
                 return ptr;
             },
             .Slice => {
+                // Fast path for non-pointer types
+                switch (@typeInfo(info.child)) {
+                    .Bool, .Int, .Float, .Enum, .Vector => return allocator.dupe(info.child, src),
+                    else => {},
+                }
+
                 const slice = try allocator.alloc(info.child, src.len);
                 for (src, 0..) |x, i| {
                     slice[i] = try deepCopy(allocator, x);
