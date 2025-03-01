@@ -1,15 +1,15 @@
 const std = @import("std");
 const zeit = @import("zeit");
 
-pub const Channel = @import("types/Channel.zig");
-pub const ChannelFull = @import("types/ChannelFull.zig");
-pub const Song = @import("types/Song.zig");
-pub const Uuid = @import("types/Uuid.zig");
-pub const Video = @import("types/Video.zig");
-pub const VideoChannel = @import("types/VideoChannel.zig");
-pub const VideoFull = @import("types/VideoFull.zig");
-pub const VideoFullChannel = @import("types/VideoFullChannel.zig");
-pub const Vtuber = @import("types/Vtuber.zig");
+pub const Channel = @import("datatypes/Channel.zig");
+pub const ChannelFull = @import("datatypes/ChannelFull.zig");
+pub const Song = @import("datatypes/Song.zig");
+pub const Uuid = @import("datatypes/Uuid.zig");
+pub const Video = @import("datatypes/Video.zig");
+pub const VideoChannel = @import("datatypes/VideoChannel.zig");
+pub const VideoFull = @import("datatypes/VideoFull.zig");
+pub const VideoFullChannel = @import("datatypes/VideoFullChannel.zig");
+pub const Vtuber = @import("datatypes/Vtuber.zig");
 
 /// Errors that can occur when converting a JSON type to its corresponding type.
 pub const JsonConversionError = Timestamp.ParseError || Uuid.ParseError || std.mem.Allocator.Error;
