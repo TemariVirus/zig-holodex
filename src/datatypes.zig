@@ -96,21 +96,29 @@ pub const Duration = enum(u32) {
 };
 
 /// A UNIX timestamp.
-pub const Timestamp = struct {
-    /// The number of seconds since the UNIX epoch (midnight UTC, January 1, 1970).
-    seconds: i64,
+/// The number of seconds since the UNIX epoch (midnight UTC, January 1, 1970).
+pub const Timestamp = enum(i64) {
+    _,
 
     pub const ParseError = error{InvalidTimestamp};
 
-    pub fn fromInstant(instant: zeit.Instant) Timestamp {
-        return .{ .seconds = instant.unixTimestamp() };
+    pub fn seconds(self: Timestamp) i64 {
+        return @intFromEnum(self);
+    }
+
+    pub fn fromSeconds(s: i64) Timestamp {
+        return @enumFromInt(s);
     }
 
     pub fn toInstant(self: Timestamp) zeit.Instant {
         return zeit.instant(.{
-            .source = .{ .unix_timestamp = self.seconds },
+            .source = .{ .unix_timestamp = self.seconds() },
             .timezone = &zeit.utc,
         }) catch unreachable;
+    }
+
+    pub fn fromInstant(instant: zeit.Instant) Timestamp {
+        return @enumFromInt(instant.unixTimestamp());
     }
 
     /// Parse a timestamp in the ISO 8601 format
@@ -140,11 +148,11 @@ pub const Timestamp = struct {
     }
 
     pub fn add(self: Timestamp, duration: Duration) Timestamp {
-        return .{ .seconds = self.seconds + @as(i64, duration.seconds()) };
+        return Timestamp.fromSeconds(self.seconds() + @as(i64, duration.seconds()));
     }
 
     pub fn sub(self: Timestamp, duration: Duration) Timestamp {
-        return .{ .seconds = self.seconds - @as(i64, duration.seconds()) };
+        return Timestamp.fromSeconds(self.seconds() - @as(i64, duration.seconds()));
     }
 };
 
