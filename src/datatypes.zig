@@ -9,7 +9,7 @@ pub const VideoChannel = @import("types/VideoChannel.zig");
 pub const Vtuber = @import("types/Vtuber.zig");
 
 /// Errors that can occur when converting a JSON type to its corresponding type.
-pub const JsonConversionError = error{InvalidTimestamp} || std.mem.Allocator.Error;
+pub const JsonConversionError = Timestamp.ParseError || std.mem.Allocator.Error;
 
 /// A language code.
 pub const Language = []const u8;
@@ -99,6 +99,8 @@ pub const Timestamp = struct {
     /// The number of seconds since the UNIX epoch (midnight UTC, January 1, 1970).
     seconds: i64,
 
+    pub const ParseError = error{InvalidTimestamp};
+
     pub fn fromInstant(instant: zeit.Instant) Timestamp {
         return .{ .seconds = instant.unixTimestamp() };
     }
@@ -111,10 +113,10 @@ pub const Timestamp = struct {
     }
 
     /// Parse a timestamp in the ISO 8601 format
-    pub fn parseISO(iso8601: []const u8) error{InvalidTimestamp}!Timestamp {
+    pub fn parseISO(iso8601: []const u8) ParseError!Timestamp {
         const instant = zeit.instant(.{
             .source = .{ .iso8601 = iso8601 },
-        }) catch return error.InvalidTimestamp;
+        }) catch return ParseError.InvalidTimestamp;
         return fromInstant(instant);
     }
 

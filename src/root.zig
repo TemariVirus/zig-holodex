@@ -12,7 +12,7 @@ pub const QueryFormatter = @import("QueryFormatter.zig").QueryFormatter;
 pub const formatQuery = @import("QueryFormatter.zig").formatQuery;
 
 /// Parse an optional timestamp in the ISO 8601 format.
-pub fn parseOptionalTimestamp(timestamp: ?[]const u8) error{InvalidTimestamp}!?datatypes.Timestamp {
+pub fn parseOptionalTimestamp(timestamp: ?[]const u8) datatypes.Timestamp.ParseError!?datatypes.Timestamp {
     return if (timestamp) |tp|
         try datatypes.Timestamp.parseISO(tp)
     else
