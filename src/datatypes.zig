@@ -54,11 +54,11 @@ pub const VideoOffset = enum(u32) {
         var fbs = std.io.fixedBufferStream(&buf);
         const buf_writer = fbs.writer();
         if (d > 0) {
-            try buf_writer.print("{d}:{d:0>2}:{d:0>2}:{d:0>2}", .{ d, h, m, s });
+            buf_writer.print("{d}:{d:0>2}:{d:0>2}:{d:0>2}", .{ d, h, m, s }) catch unreachable;
         } else if (h > 0) {
-            try buf_writer.print("{d}:{d:0>2}:{d:0>2}", .{ h, m, s });
+            buf_writer.print("{d}:{d:0>2}:{d:0>2}", .{ h, m, s }) catch unreachable;
         } else {
-            try buf_writer.print("{d}:{d:0>2}", .{ m, s });
+            buf_writer.print("{d}:{d:0>2}", .{ m, s }) catch unreachable;
         }
 
         try std.fmt.formatBuf(fbs.getWritten(), options, writer);
