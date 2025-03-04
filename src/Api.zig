@@ -107,8 +107,7 @@ pub const FetchOptions = struct {
 /// Helper function to fetch data from the API and parse it as JSON.
 /// Returns an error if the response status is not 200 OK.
 ///
-/// It is recommended to use the more specific methods like `channelInfo`
-/// instead of calling this method directly.
+/// Only use this when you require the raw JSON.
 pub fn fetch(
     self: *Self,
     comptime Response: type,

@@ -1,6 +1,6 @@
 # zig-holodex
 
-An Idiomatic Zig library for the Holodex API with useful formatting by default.
+An Idiomatic Zig library for the Holodex API with pretty formatting.
 
 ## Supported Endpoints
 
