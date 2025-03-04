@@ -39,7 +39,7 @@ pub fn main() !void {
     }, .{});
     defer info.deinit();
 
-    std.debug.print("{}\n", .{info.value});
+    std.debug.print("{pretty}\n", .{info.value});
 }
 ```
 
