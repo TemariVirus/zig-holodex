@@ -23,18 +23,18 @@ pub fn parseOptionalTimestamp(timestamp: ?[]const u8) datatypes.Timestamp.ParseE
 /// to free memory properly.
 pub fn deepCopy(allocator: std.mem.Allocator, src: anytype) std.mem.Allocator.Error!@TypeOf(src) {
     return switch (@typeInfo(@TypeOf(src))) {
-        .Bool, .Int, .Float, .Array, .Enum, .Vector => src,
-        .Optional => if (src) |x| try deepCopy(allocator, x) else null,
-        .Pointer => |info| switch (info.size) {
-            .One => {
+        .bool, .int, .float, .array, .@"enum", .vector => src,
+        .optional => if (src) |x| try deepCopy(allocator, x) else null,
+        .pointer => |info| switch (info.size) {
+            .one => {
                 const ptr = try allocator.create(info.child);
                 ptr.* = try deepCopy(allocator, src.*);
                 return ptr;
             },
-            .Slice => {
+            .slice => {
                 // Fast path for non-pointer types
                 switch (@typeInfo(info.child)) {
-                    .Bool, .Int, .Float, .Enum, .Vector => return allocator.dupe(info.child, src),
+                    .bool, .int, .float, .@"enum", .vector => return allocator.dupe(info.child, src),
                     else => {},
                 }
 

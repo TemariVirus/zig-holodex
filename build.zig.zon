@@ -1,11 +1,12 @@
 .{
-    .name = "zig-holodex",
+    .name = .zig_holodex,
     .version = "0.0.0",
-    .minimum_zig_version = "0.13.0",
+    .fingerprint = 0x990a5e229eb006f0,
+    .minimum_zig_version = "0.14.0",
     .dependencies = .{
         .zeit = .{
-            .url = "git+https://github.com/rockorager/zeit#v0.5.0",
-            .hash = "122022233835adc719535a8e7cefdd2902a67bbfb7ef198441ca9ce89c0593f488c2",
+            .url = "git+https://github.com/rockorager/zeit?ref=v0.6.0#44bebf856693332b168d8ba2c45b9d1ec15511de",
+            .hash = "zeit-0.0.0-5I6bk_pZAgB03N1p1GmVOZ--gOFwwQSRKj1UXb5tnaKS",
         },
     },
     .paths = .{

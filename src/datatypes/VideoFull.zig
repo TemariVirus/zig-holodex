@@ -179,7 +179,7 @@ pub const Json = struct {
     /// Use an arena allocator to free memory properly.
     pub fn to(self: @This(), allocator: std.mem.Allocator) datatypes.JsonConversionError!Self {
         const live_tl_count = if (self.live_tl_count) |map| blk: {
-            var copy = std.StringArrayHashMapUnmanaged(u32){};
+            var copy: std.StringArrayHashMapUnmanaged(u32) = .empty;
             try copy.ensureTotalCapacity(allocator, map.map.count());
             var iter = map.map.iterator();
             while (iter.next()) |entry| {

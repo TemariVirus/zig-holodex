@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) void {
     }).module("zeit");
 
     // Export the library
-    _ = b.addModule("holodex", .{
+    const holodex = b.addModule("holodex", .{
         .root_source_file = b.path("src/root.zig"),
         .imports = &.{
             .{ .name = "zeit", .module = zeit },
@@ -21,11 +21,7 @@ pub fn build(b: *std.Build) void {
     });
 
     // Unit tests
-    const lib_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    const lib_unit_tests = b.addTest(.{ .root_module = holodex });
     lib_unit_tests.root_module.addImport("zeit", zeit);
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 

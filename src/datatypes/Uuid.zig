@@ -21,9 +21,9 @@ pub const Variant = enum {
 };
 
 /// https://www.rfc-editor.org/rfc/rfc9562#name-nil-uuid
-pub const nil: @This() = .{ .bytes = [_]u8{0b00} ** 16 };
+pub const nil: @This() = .{ .bytes = @splat(0x00) };
 /// https://www.rfc-editor.org/rfc/rfc9562#name-max-uuid
-pub const max: @This() = .{ .bytes = [_]u8{0xff} ** 16 };
+pub const max: @This() = .{ .bytes = @splat(0xff) };
 
 /// Variant of the UUID.
 pub fn variant(self: @This()) Variant {

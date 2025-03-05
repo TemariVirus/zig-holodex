@@ -125,14 +125,14 @@ pub fn fetch(
         .{ self.base_uri.path.percent_encoded, path },
     );
     defer allocator.free(uri.path.percent_encoded);
-    uri.query = Uri.Component{ .percent_encoded = try fmt.allocPrint(
+    uri.query = .{ .percent_encoded = try fmt.allocPrint(
         allocator,
         "{}",
         .{holodex.formatQuery(&query)},
     ) };
     defer allocator.free(uri.query.?.percent_encoded);
 
-    var res_buffer = std.ArrayList(u8).init(allocator);
+    var res_buffer: std.ArrayList(u8) = .init(allocator);
     defer res_buffer.deinit();
     const status = (self.client.fetch(.{
         .response_storage = .{ .dynamic = &res_buffer },
@@ -174,7 +174,7 @@ pub fn fetch(
         http.Client.ConnectTcpError.UnexpectedConnectFailure,
         http.Client.ConnectTcpError.TlsInitializationFailed,
         error.OutOfMemory,
-        => return @as(FetchError, @errorCast(err)),
+        => return @errorCast(err),
         error.StreamTooLong => return FetchError.ResponseTooLarge,
         http.Client.RequestError.CertificateBundleLoadFailure => return FetchError.TlsCertificateBundleLoadFailure,
         // Group other errors into `UnexpectedFetchFailure`. There usually isn't
@@ -254,7 +254,7 @@ pub fn channelInfo(
     defer parsed.deinit();
 
     var arena = try allocator.create(std.heap.ArenaAllocator);
-    arena.* = std.heap.ArenaAllocator.init(allocator);
+    arena.* = .init(allocator);
     errdefer arena.deinit();
 
     const result = parsed.value.to(arena.allocator()) catch |err| return toFetchError(err);
@@ -310,7 +310,7 @@ pub fn videoInfo(
     defer parsed.deinit();
 
     var arena = try allocator.create(std.heap.ArenaAllocator);
-    arena.* = std.heap.ArenaAllocator.init(allocator);
+    arena.* = .init(allocator);
     errdefer arena.deinit();
 
     const result = parsed.value.to(arena.allocator()) catch |err| return toFetchError(err);
@@ -358,7 +358,7 @@ pub fn listChannels(
     defer parsed.deinit();
 
     var arena = try allocator.create(std.heap.ArenaAllocator);
-    arena.* = std.heap.ArenaAllocator.init(allocator);
+    arena.* = .init(allocator);
     errdefer arena.deinit();
 
     const result = try arena.allocator().alloc(datatypes.Channel, parsed.value.len);

@@ -8,7 +8,7 @@ const percentEncode = @import("root.zig").percentEncode;
 /// See `holodex.formatQuery` for more details.
 pub fn QueryFormatter(comptime T: type) type {
     switch (@typeInfo(T)) {
-        .Struct => {},
+        .@"struct" => {},
         else => @compileError("Expected struct, found '" ++ @typeName(T) ++ "'"),
     }
 
@@ -27,9 +27,9 @@ pub fn QueryFormatter(comptime T: type) type {
                 }
 
                 switch (@typeInfo(@TypeOf(value))) {
-                    .Pointer => |info| try handlePointer(info, key, value, writer),
-                    .Optional => try handleOptional(key, value, writer),
-                    .Enum => try handleEnum(key, value, writer),
+                    .pointer => |info| try handlePointer(info, key, value, writer),
+                    .optional => try handleOptional(key, value, writer),
+                    .@"enum" => try handleEnum(key, value, writer),
                     else => try writer.print("{s}={}", .{ percentEncode(key), percentEncode(value) }),
                 }
             }
@@ -37,7 +37,7 @@ pub fn QueryFormatter(comptime T: type) type {
 
         fn willPrint(value: anytype) bool {
             return switch (@typeInfo(@TypeOf(value))) {
-                .Optional => value != null,
+                .optional => value != null,
                 else => true,
             };
         }
@@ -64,8 +64,8 @@ pub fn QueryFormatter(comptime T: type) type {
         fn handleOptional(key: []const u8, value: anytype, writer: anytype) !void {
             if (value) |val| {
                 switch (@typeInfo(@TypeOf(val))) {
-                    .Pointer => |info| try handlePointer(info, key, val, writer),
-                    .Enum => try handleEnum(key, val, writer),
+                    .pointer => |info| try handlePointer(info, key, val, writer),
+                    .@"enum" => try handleEnum(key, val, writer),
                     else => try writer.print("{s}={}", .{ percentEncode(key), percentEncode(val) }),
                 }
             }

@@ -128,10 +128,10 @@ fn format(
 
     const string_writer = StringWriter(@TypeOf(writer)){ .writer = writer };
     switch (@typeInfo(T)) {
-        .ComptimeInt,
-        .Int,
-        .ComptimeFloat,
-        .Float,
+        .comptime_int,
+        .int,
+        .comptime_float,
+        .float,
         => return std.fmt.formatType(
             value,
             if (is_raw or is_pretty) "" else fmt,
@@ -139,15 +139,15 @@ fn format(
             writer,
             max_depth,
         ),
-        .Bool => return formatBuf(if (value) "true" else "false", options, writer),
-        .Optional => {
+        .bool => return formatBuf(if (value) "true" else "false", options, writer),
+        .optional => {
             if (value) |payload| {
                 return format(payload, fmt, options, pretty_formatter, Overwrites, max_depth, false);
             } else {
                 return formatBuf("null", options, writer);
             }
         },
-        .Enum => |enumInfo| {
+        .@"enum" => |enumInfo| {
             if (enumInfo.is_exhaustive) {
                 try writer.writeAll(".");
                 try writer.writeAll(@tagName(value));
@@ -168,7 +168,7 @@ fn format(
             try format(@intFromEnum(value), fmt, options, pretty_formatter, struct {}, max_depth, false);
             try writer.writeAll(")");
         },
-        .Union => |info| {
+        .@"union" => |info| {
             try writer.writeAll(@typeName(T));
             if (max_depth == 0) {
                 return writer.writeAll("{ ... }");
@@ -195,7 +195,7 @@ fn format(
                 try std.fmt.format(writer, "@{x}", .{@intFromPtr(&value)});
             }
         },
-        .Struct => |info| {
+        .@"struct" => |info| {
             if (info.is_tuple) {
                 // Skip the type and field names when formatting tuples.
                 if (max_depth == 0) {
@@ -248,9 +248,9 @@ fn format(
             try pretty_formatter.nextField();
             try writer.writeByte('}');
         },
-        .Pointer => |ptr_info| switch (ptr_info.size) {
-            .One => switch (@typeInfo(ptr_info.child)) {
-                .Array, .Enum, .Union, .Struct => {
+        .pointer => |ptr_info| switch (ptr_info.size) {
+            .one => switch (@typeInfo(ptr_info.child)) {
+                .array, .@"enum", .@"union", .@"struct" => {
                     return format(value.*, fmt, options, pretty_formatter, Overwrites, max_depth, false);
                 },
                 else => return std.fmt.format(
@@ -259,7 +259,7 @@ fn format(
                     .{ @typeName(ptr_info.child), @intFromPtr(value) },
                 ),
             },
-            .Many, .C => {
+            .many, .c => {
                 if (ptr_info.sentinel) |_| {
                     return format(mem.span(value), fmt, options, pretty_formatter, Overwrites, max_depth, false);
                 }
@@ -268,7 +268,7 @@ fn format(
                 }
                 @compileError("Non-sentinel terminated pointer types must use '*' format string");
             },
-            .Slice => {
+            .slice => {
                 if (max_depth == 0) {
                     return writer.writeAll("{ ... }");
                 }
@@ -290,13 +290,13 @@ fn format(
                 try writer.writeByte('}');
             },
         },
-        .Array => |_| return format(&value, fmt, options, pretty_formatter, Overwrites, max_depth, false),
-        .Fn => @compileError("unable to format function body type, use '*const " ++ @typeName(T) ++ "' for a function pointer type"),
-        .EnumLiteral => {
+        .array => |_| return format(&value, fmt, options, pretty_formatter, Overwrites, max_depth, false),
+        .@"fn" => @compileError("unable to format function body type, use '*const " ++ @typeName(T) ++ "' for a function pointer type"),
+        .enum_literal => {
             const buffer = [_]u8{'.'} ++ @tagName(value);
             return formatBuf(buffer, options, writer);
         },
-        .Null => return formatBuf("null", options, writer),
+        .null => return formatBuf("null", options, writer),
         else => @compileError("unable to format type '" ++ @typeName(T) ++ "'"),
     }
 }

@@ -37,7 +37,7 @@ pub const Json = struct {
     /// Use an arena allocator to free memory properly.
     pub fn to(self: @This(), allocator: std.mem.Allocator) datatypes.JsonConversionError!Self {
         return Self{
-            .holodex_id = try datatypes.Uuid.parse(self.id),
+            .holodex_id = try .parse(self.id),
             .name = try holodex.deepCopy(allocator, self.name),
             .original_artist = try holodex.deepCopy(allocator, self.original_artist),
             .start = self.start,
