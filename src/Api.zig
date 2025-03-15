@@ -333,6 +333,7 @@ fn conversionToFetchError(err: datatypes.JsonConversionError) FetchError {
         datatypes.JsonConversionError.OutOfMemory => return FetchError.OutOfMemory,
         datatypes.JsonConversionError.InvalidTimestamp,
         datatypes.JsonConversionError.InvalidUuid,
+        datatypes.JsonConversionError.MissingField,
         => return FetchError.InvalidJsonResponse,
     };
 }

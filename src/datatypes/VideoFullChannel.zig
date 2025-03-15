@@ -19,17 +19,22 @@ org: ?datatypes.Organization = null,
 group: ?datatypes.Group = null,
 /// URL to the channel's profile picture.
 photo: []const u8,
-/// Number of videos the channel has uploaded.
-video_count: u32,
-/// Number of subscribers the channel has.
-subscriber_count: u64,
-/// Number of views the channel has.
-view_count: u64,
-/// Number of clips of the channel. `0` if the channel is a subber.
-clip_count: ?u32 = null,
+/// Channel statistics.
+stats: ?Stats,
 
 const Self = @This();
 pub const format = holodex.defaultFormat(@This(), struct {});
+
+pub const Stats = struct {
+    /// Number of videos the channel has uploaded.
+    video_count: u32,
+    /// Number of subscribers the channel has.
+    subscriber_count: u64,
+    /// Number of views the channel has.
+    view_count: u64,
+    /// Number of clips of the channel. `0` if the channel is a subber.
+    clip_count: u32,
+};
 
 /// The JSON representation of a `VideoFullChannel`.
 pub const Json = struct {
@@ -40,19 +45,32 @@ pub const Json = struct {
     org: ?[]const u8 = null,
     suborg: ?[]const u8 = null,
     photo: []const u8,
-    video_count: u32,
-    subscriber_count: u64,
-    view_count: u64,
+
+    // Only returned when 'includes' contains 'channel_stats'
+    video_count: ?u32 = null,
+    subscriber_count: ?u64 = null,
+    view_count: ?u64 = null,
     clip_count: ?u32 = null,
 
     /// Convert to a `VideoFullChannel`. This function leaks memory when returning an error.
     /// Use an arena allocator to free memory properly.
     pub fn to(self: @This(), allocator: std.mem.Allocator) datatypes.JsonConversionError!Self {
         const group = if (self.suborg) |suborg|
-            // Remove the 2 random letters preceding the group name.
-            try holodex.deepCopy(allocator, suborg[2..])
+            if (suborg.len <= 2)
+                null
+            else
+                // Remove the 2 random letters preceding the group name.
+                try holodex.deepCopy(allocator, suborg[2..])
         else
             null;
+
+        // Use non-nullable `video_count` field to check if `stats` should be `null`
+        const stats = if (self.video_count) |_| Stats{
+            .video_count = self.video_count.?,
+            .subscriber_count = self.subscriber_count orelse return datatypes.JsonConversionError.MissingField,
+            .view_count = self.view_count orelse return datatypes.JsonConversionError.MissingField,
+            .clip_count = self.clip_count orelse 0,
+        } else null;
 
         return .{
             .id = try holodex.deepCopy(allocator, self.id),
@@ -62,10 +80,7 @@ pub const Json = struct {
             .org = try holodex.deepCopy(allocator, self.org),
             .group = group,
             .photo = try holodex.deepCopy(allocator, self.photo),
-            .video_count = self.video_count,
-            .subscriber_count = self.subscriber_count,
-            .view_count = self.view_count,
-            .clip_count = self.clip_count,
+            .stats = stats,
         };
     }
 };

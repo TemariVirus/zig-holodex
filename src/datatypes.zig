@@ -6,14 +6,17 @@ pub const Channel = @import("datatypes/Channel.zig");
 pub const ChannelFull = @import("datatypes/ChannelFull.zig");
 pub const Song = @import("datatypes/Song.zig");
 pub const Uuid = @import("datatypes/Uuid.zig");
-pub const Video = @import("datatypes/Video.zig");
-pub const VideoChannel = @import("datatypes/VideoChannel.zig");
 pub const VideoFull = @import("datatypes/VideoFull.zig");
 pub const VideoFullChannel = @import("datatypes/VideoFullChannel.zig");
+pub const VideoMin = @import("datatypes/VideoMin.zig");
+pub const VideoMinChannel = @import("datatypes/VideoMinChannel.zig");
 pub const Vtuber = @import("datatypes/Vtuber.zig");
 
 /// Errors that can occur when converting a JSON type to its corresponding type.
-pub const JsonConversionError = Timestamp.ParseError || Uuid.ParseError || std.mem.Allocator.Error;
+pub const JsonConversionError = Timestamp.ParseError ||
+    Uuid.ParseError ||
+    std.mem.Allocator.Error ||
+    error{MissingField};
 
 /// A language code.
 pub const Language = []const u8;

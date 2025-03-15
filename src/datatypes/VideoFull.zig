@@ -4,7 +4,7 @@ const std = @import("std");
 
 const holodex = @import("../root.zig");
 const datatypes = holodex.datatypes;
-const Video = datatypes.Video;
+const VideoMin = datatypes.VideoMin;
 
 /// YouTube video id.
 id: []const u8,
@@ -36,13 +36,13 @@ channel: datatypes.VideoFullChannel,
 /// Information about the livestream. `null` if the video is not a stream.
 live_info: ?LiveInfo = null,
 /// Clips of the video.
-clips: ?[]const Video = null,
+clips: ?[]const VideoMin = null,
 /// Sources of the clip. `null` if the video is not a clip.
-sources: ?[]const Video = null,
-/// TODO: What are refers?
-refers: ?[]const Video = null,
+sources: ?[]const VideoMin = null,
+/// Videos linked in the description.
+refers: ?[]const VideoMin = null,
 /// TODO: What are simulcasts?
-simulcasts: ?[]const Video = null,
+simulcasts: ?[]const VideoMin = null,
 /// VTubers featured in this video.
 mentions: ?[]const datatypes.Vtuber = null,
 /// Comments with timestamps on the video.
@@ -140,8 +140,11 @@ pub const Json = struct {
     status: Status,
     lang: ?[]const u8 = null,
     live_tl_count: ?std.json.ArrayHashMap(u32) = null,
+    // Only returned when 'includes' contains 'description'
     description: ?[]const u8 = null,
+    // Only returned when 'includes' contains 'songs'
     songs: ?[]const datatypes.Song.Json = null,
+    // Ignore `songscount`
     channel: datatypes.VideoFullChannel.Json,
 
     // Only returned when 'includes' contains 'live_info'
@@ -151,13 +154,13 @@ pub const Json = struct {
     live_viewers: ?u64 = null,
 
     // Only returned when 'includes' contains 'clips'
-    clips: ?[]const Video.Json = null,
+    clips: ?[]const VideoMin.Json = null,
     // Only returned when 'includes' contains 'sources'
-    sources: ?[]const Video.Json = null,
+    sources: ?[]const VideoMin.Json = null,
     // Only returned when 'includes' contains 'refers'
-    refers: ?[]const Video.Json = null,
+    refers: ?[]const VideoMin.Json = null,
     // Only returned when 'includes' contains 'simulcasts'
-    simulcasts: ?[]const Video.Json = null,
+    simulcasts: ?[]const VideoMin.Json = null,
     // Only returned when 'includes' contains 'mentions'
     mentions: ?[]const datatypes.Vtuber.Json = null,
     // Only returned when c === '1', comments with timestamps only
@@ -218,10 +221,10 @@ pub const Json = struct {
             .channel = try self.channel.to(allocator),
 
             .live_info = live_info,
-            .clips = try toOptionalArray(Video, allocator, self.clips),
-            .sources = try toOptionalArray(Video, allocator, self.sources),
-            .refers = try toOptionalArray(Video, allocator, self.refers),
-            .simulcasts = try toOptionalArray(Video, allocator, self.simulcasts),
+            .clips = try toOptionalArray(VideoMin, allocator, self.clips),
+            .sources = try toOptionalArray(VideoMin, allocator, self.sources),
+            .refers = try toOptionalArray(VideoMin, allocator, self.refers),
+            .simulcasts = try toOptionalArray(VideoMin, allocator, self.simulcasts),
             .mentions = try toOptionalArray(datatypes.Vtuber, allocator, self.mentions),
             .timestamp_comments = try toOptionalArray(Comment, allocator, self.comments),
         };

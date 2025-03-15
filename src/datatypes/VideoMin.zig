@@ -1,4 +1,4 @@
-//! Basic information about a video.
+//! Minimum information about a video.
 
 const std = @import("std");
 
@@ -16,7 +16,7 @@ title: []const u8,
 /// Status of the video.
 status: datatypes.VideoFull.Status,
 /// Channel the video is from.
-channel: datatypes.VideoChannel,
+channel: datatypes.VideoMinChannel,
 /// Duration of the video. `0` if the video is a stream that has not ended.
 duration: datatypes.Duration,
 /// When the video went live or became viewable.
@@ -25,18 +25,18 @@ available_at: ?datatypes.Timestamp = null,
 const Self = @This();
 pub const format = holodex.defaultFormat(@This(), struct {});
 
-/// The JSON representation of a `Video`.
+/// The JSON representation of a `VideoMin`.
 pub const Json = struct {
     id: []const u8,
     lang: ?[]const u8 = null,
     type: datatypes.VideoFull.Type,
     title: []const u8,
     status: datatypes.VideoFull.Status,
-    channel: datatypes.VideoChannel.Json,
+    channel: datatypes.VideoMinChannel.Json,
     duration: datatypes.Duration = datatypes.Duration.fromSeconds(0),
     available_at: ?[]const u8 = null,
 
-    /// Convert to a `Video`. This function leaks memory when returning an error.
+    /// Convert to a `VideoMin`. This function leaks memory when returning an error.
     /// Use an arena allocator to free memory properly.
     pub fn to(self: @This(), allocator: std.mem.Allocator) datatypes.JsonConversionError!Self {
         return .{

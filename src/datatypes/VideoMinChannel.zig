@@ -1,5 +1,4 @@
-//! Channel information associated with a `Video`. The channel is assumed to
-//! always be a VTuber channel, so no `type` field exists.
+//! Channel information associated with a `VideoMin`.
 
 const std = @import("std");
 
@@ -20,7 +19,7 @@ photo: []const u8,
 const Self = @This();
 pub const format = holodex.defaultFormat(@This(), struct {});
 
-/// The JSON representation of a `VideoChannel`.
+/// The JSON representation of a `VideoMinChannel`.
 pub const Json = struct {
     id: []const u8,
     name: []const u8,
@@ -28,7 +27,7 @@ pub const Json = struct {
     org: ?[]const u8 = null,
     photo: []const u8,
 
-    /// Convert to a `VideoChannel`. This function leaks memory when returning an error.
+    /// Convert to a `VideoMinChannel`. This function leaks memory when returning an error.
     /// Use an arena allocator to free memory properly.
     pub fn to(self: @This(), allocator: std.mem.Allocator) datatypes.JsonConversionError!Self {
         return .{
