@@ -436,7 +436,8 @@ pub const ListChannelsOptions = struct {
     type: ?datatypes.ChannelFull.Type = null,
     /// Offset to start at.
     offset: u64 = 0,
-    /// Maximum number of channels to return. Must be less than or equal to 50.
+    /// Maximum number of channels to return. Must be greater than 0, and less
+    /// than or equal to 100.
     limit: usize = 25,
     /// If not null, filter VTubers belonging to this organization.
     org: ?datatypes.Organization = null,
@@ -456,8 +457,8 @@ pub fn listChannels(
     allocator: Allocator,
     options: ListChannelsOptions,
     fetch_options: FetchOptions,
-) FetchError!Response([]datatypes.Channel) {
-    assert(options.limit <= 50);
+) (FetchError || error{InvalidLimit})!Response([]datatypes.Channel) {
+    if (options.limit <= 0 or options.limit > 100) return error.InvalidLimit;
 
     const parsed = try self.fetch(
         []datatypes.Channel.Json,
