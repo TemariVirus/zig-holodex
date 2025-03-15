@@ -8,9 +8,7 @@ pub const Comment = @import("datatypes/Comment.zig");
 pub const Song = @import("datatypes/Song.zig");
 pub const Uuid = @import("datatypes/Uuid.zig");
 pub const VideoFull = @import("datatypes/VideoFull.zig");
-pub const VideoFullChannel = @import("datatypes/VideoFullChannel.zig");
 pub const VideoMin = @import("datatypes/VideoMin.zig");
-pub const VideoMinChannel = @import("datatypes/VideoMinChannel.zig");
 pub const Vtuber = @import("datatypes/Vtuber.zig");
 
 /// Errors that can occur when converting a JSON type to its corresponding type.
