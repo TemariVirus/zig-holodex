@@ -27,6 +27,27 @@ pub fn Pager(
             }
         }
 
+        /// Return the headers of the last response, or `null` if there was no
+        /// last response.
+        pub fn lastResponseHeaders(self: @This()) ?Api.ResponseHeaders {
+            if (self.responses) |res| {
+                return res.headers;
+            }
+            return null;
+        }
+
+        /// Return the index of the current item, starting from 0.
+        pub fn currentIndex(self: @This()) usize {
+            const page_len = if (self.responses) |res| res.value.len else 0;
+            return self.query.offset - page_len + self.responses_index -| 1;
+        }
+
+        /// Return the current page number, starting from 0. Assumes that
+        /// `query.limit` has not changed after initialization.
+        pub fn currentPage(self: @This()) usize {
+            return @divExact(self.query.offset, self.query.limit) -| 1;
+        }
+
         /// Return the next result, or `null` if there are no more results.
         /// The caller does not own the memory of the returned value.
         /// `deinit` must be called to free the memory used by the pager.
@@ -63,15 +84,6 @@ pub fn Pager(
             self.responses = new_responses;
             self.responses_index = 0;
             self.query.offset += @intCast(new_responses.value.len);
-        }
-
-        /// Return the headers of the last response, or `null` if there was no
-        /// last response.
-        pub fn lastResponseHeaders(self: @This()) ?Api.ResponseHeaders {
-            if (self.responses) |res| {
-                return res.headers;
-            }
-            return null;
         }
     };
 }
