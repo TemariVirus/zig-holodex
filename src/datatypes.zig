@@ -1,6 +1,7 @@
 const std = @import("std");
 const zeit = @import("zeit");
 
+// TODO: implement jsonParse directly instead of parsing and copying
 pub const Channel = @import("datatypes/Channel.zig");
 pub const ChannelFull = @import("datatypes/ChannelFull.zig");
 pub const Song = @import("datatypes/Song.zig");

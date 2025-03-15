@@ -21,8 +21,16 @@ client: http.Client,
 const Self = @This();
 const empty_query = (struct {}){};
 
+/// Errors that can occur when initializing an `Api` instance.
+pub const InitError = Uri.ParseError || error{
+    /// The URI scheme is not supported by `http.Client`.
+    UnsupportedUriScheme,
+    /// The URI is missing a host.
+    UriMissingHost,
+};
+
 /// Errors that can occur when fetching data from the API.
-pub const FetchError = error{
+pub const FetchError = http.Client.ConnectTcpError || error{
     /// The API key used is invalid or expired.
     BadApiKey,
     /// The requested resource was not found.
@@ -44,13 +52,89 @@ pub const FetchError = error{
     /// most likely arise from a bad server response or an unsupported feature
     /// in `std.http.Client`.
     UnexpectedFetchFailure,
-} || http.Client.ConnectTcpError;
+};
 
 /// The order to sort results in.
 pub const SortOrder = enum {
     asc,
     desc,
 };
+
+pub const ResponseHeaders = struct {
+    // Max number of requests that can be made in a period of time.
+    rate_limit: u32,
+    // Number of remaining requests before the rate limit is reached.
+    rate_limit_remaining: u32,
+    // When `rate_limit_remaining` will reset to `rate_limit`.
+    rate_limit_reset: datatypes.Timestamp,
+
+    pub const ParseError = fmt.ParseIntError || error{
+        DuplicateHeader,
+        InvalidHeader,
+        MissingHeader,
+        Overflow,
+    };
+    pub fn parse(bytes: []const u8) ParseError!ResponseHeaders {
+        const field_map: std.StaticStringMapWithEql(
+            meta.FieldEnum(ResponseHeaders),
+            std.static_string_map.eqlAsciiIgnoreCase,
+        ) = .initComptime(.{
+            .{ "X-Ratelimit-Limit", .rate_limit },
+            .{ "X-Ratelimit-Remaining", .rate_limit_remaining },
+            .{ "X-Ratelimit-Reset", .rate_limit_reset },
+        });
+
+        var headers_it: http.HeaderIterator = .init(bytes);
+        _ = headers_it.next() orelse return ParseError.InvalidHeader;
+
+        var headers: ResponseHeaders = undefined;
+        var fields_seen: [@typeInfo(ResponseHeaders).@"struct".fields.len]bool = @splat(false);
+        while (headers_it.next()) |header| {
+            const field = field_map.get(header.name) orelse continue;
+            if (fields_seen[@intFromEnum(field)]) {
+                return ParseError.DuplicateHeader;
+            }
+
+            fields_seen[@intFromEnum(field)] = true;
+            switch (field) {
+                .rate_limit => headers.rate_limit =
+                    try parseHeaderInt(u32, header.value),
+                .rate_limit_remaining => headers.rate_limit_remaining =
+                    try parseHeaderInt(u32, header.value),
+                .rate_limit_reset => headers.rate_limit_reset =
+                    datatypes.Timestamp.fromSeconds(
+                        try parseHeaderInt(i64, header.value),
+                    ),
+            }
+        }
+
+        if (!std.mem.allEqual(bool, &fields_seen, true)) {
+            return ParseError.MissingHeader;
+        }
+        return headers;
+    }
+
+    fn parseHeaderInt(comptime T: type, buf: []const u8) ParseError!T {
+        return std.fmt.parseInt(T, buf, 10) catch |err| return switch (err) {
+            std.fmt.ParseIntError.InvalidCharacter => ParseError.InvalidHeader,
+            std.fmt.ParseIntError.Overflow => ParseError.Overflow,
+        };
+    }
+};
+
+pub fn Response(comptime T: type) type {
+    return struct {
+        arena: *std.heap.ArenaAllocator,
+        headers: ResponseHeaders,
+        value: T,
+
+        pub fn deinit(self: @This()) void {
+            const allocator = self.arena.child_allocator;
+            self.arena.deinit();
+            allocator.destroy(self.arena);
+        }
+    };
+}
 
 pub const InitOptions = struct {
     /// The API key to use for requests. This value must outlive it's `Api` instance.
@@ -63,14 +147,19 @@ pub const InitOptions = struct {
         url: []const u8,
     } = .{ .uri = Uri.parse("https://holodex.net/api/v2") catch unreachable },
 };
-pub fn init(allocator: Allocator, options: InitOptions) (Uri.ParseError || error{UriMissingHost})!Self {
+pub fn init(allocator: Allocator, options: InitOptions) InitError!Self {
     const base_uri = removeTrailingSlash(switch (options.location) {
         .uri => |uri| uri,
         .url => |url| try Uri.parse(url),
     });
-    if (base_uri.host == null) return error.UriMissingHost;
 
-    return Self{
+    const supported_schemes: std.StaticStringMap(void) = .initComptime(
+        .{ .{"http"}, .{"https"} },
+    );
+    if (!supported_schemes.has(base_uri.scheme)) return InitError.UnsupportedUriScheme;
+    if (base_uri.host == null) return InitError.UriMissingHost;
+
+    return .{
         .api_key = options.api_key,
         .base_uri = base_uri,
         .client = http.Client{ .allocator = allocator },
@@ -94,9 +183,6 @@ pub fn deinit(self: *Self) void {
 }
 
 pub const FetchOptions = struct {
-    /// The maximum size of the response body in bytes. If the response exceeds
-    /// this size, `FetchError.ResponseTooLarge` will be returned.
-    max_response_size: usize = 8 * 1024 * 1024, // Most responses are a few KiB, 8 MiB should be enough
     /// The behavior to use when a duplicate field is encountered in the JSON
     /// response.
     json_duplicate_field_behavior: meta.fieldInfo(json.ParseOptions, .duplicate_field_behavior).type = .@"error",
@@ -110,14 +196,14 @@ pub const FetchOptions = struct {
 /// Only use this when you require the raw JSON.
 pub fn fetch(
     self: *Self,
-    comptime Response: type,
+    comptime T: type,
     allocator: Allocator,
     method: http.Method,
     path: []const u8,
     query: anytype,
     payload: anytype,
     options: FetchOptions,
-) FetchError!json.Parsed(Response) {
+) FetchError!Response(T) {
     var uri = self.base_uri;
     uri.path.percent_encoded = try fmt.allocPrint(
         allocator,
@@ -132,75 +218,32 @@ pub fn fetch(
     ) };
     defer allocator.free(uri.query.?.percent_encoded);
 
-    var res_buffer: std.ArrayList(u8) = .init(allocator);
-    defer res_buffer.deinit();
-    const status = (self.client.fetch(.{
-        .response_storage = .{ .dynamic = &res_buffer },
-        .max_append_size = options.max_response_size,
-
-        .location = .{ .uri = uri },
-        .method = method,
-        .payload = payload,
-
+    var server_header_buffer: [16 * 1024]u8 = undefined;
+    var req = self.client.open(method, uri, .{
+        .server_header_buffer = &server_header_buffer,
         .extra_headers = &.{.{
             .name = "X-APIKEY",
             .value = self.api_key,
         }},
-    }) catch |err| switch (err) {
-        // The arguments passed into `client.fetch` means that no code paths lead to these errors
-        fmt.ParseIntError.Overflow,
-        fmt.ParseIntError.InvalidCharacter,
-        Uri.ParseError.InvalidFormat,
-        Uri.ParseError.InvalidPort,
-        Uri.ParseError.UnexpectedCharacter,
-        http.Client.RequestError.UnsupportedUriScheme,
-        http.Client.RequestError.UriMissingHost,
-        http.Client.RequestError.UnsupportedTransferEncoding,
-        http.Client.Request.WriteError.NotWriteable,
-        http.Client.Request.WriteError.MessageTooLong,
-        http.Client.Request.ReadError.InvalidTrailers,
-        http.Client.Request.FinishError.MessageNotCompleted,
-        http.Client.Response.ParseError.HttpConnectionHeaderUnsupported,
-        => unreachable,
-        // These errors should be returned
-        http.Client.ConnectTcpError.ConnectionRefused,
-        http.Client.ConnectTcpError.NetworkUnreachable,
-        http.Client.ConnectTcpError.ConnectionTimedOut,
-        http.Client.ConnectTcpError.ConnectionResetByPeer,
-        http.Client.ConnectTcpError.TemporaryNameServerFailure,
-        http.Client.ConnectTcpError.NameServerFailure,
-        http.Client.ConnectTcpError.UnknownHostName,
-        http.Client.ConnectTcpError.HostLacksNetworkAddresses,
-        http.Client.ConnectTcpError.UnexpectedConnectFailure,
-        http.Client.ConnectTcpError.TlsInitializationFailed,
-        error.OutOfMemory,
-        => return @errorCast(err),
-        error.StreamTooLong => return FetchError.ResponseTooLarge,
-        http.Client.RequestError.CertificateBundleLoadFailure => return FetchError.TlsCertificateBundleLoadFailure,
-        // Group other errors into `UnexpectedFetchFailure`. There usually isn't
-        // anything the user can do about these errors, as they arise from a
-        // bad server response or an unsupported feature in `http.Client`.
-        http.Client.Connection.WriteError.UnexpectedWriteFailure,
-        http.Client.Connection.ReadError.TlsFailure,
-        http.Client.Connection.ReadError.TlsAlert,
-        http.Client.Connection.ReadError.UnexpectedReadFailure,
-        http.Client.Connection.ReadError.EndOfStream,
-        http.Client.Request.WaitError.TooManyHttpRedirects,
-        http.Client.Request.WaitError.RedirectRequiresResend,
-        http.Client.Request.WaitError.HttpRedirectLocationMissing,
-        http.Client.Request.WaitError.HttpRedirectLocationInvalid,
-        http.Client.Request.WaitError.CompressionInitializationFailed,
-        http.Client.Request.WaitError.HttpHeadersOversize,
-        http.Client.Request.ReadError.DecompressionFailure,
-        http.Client.Response.ParseError.HttpHeadersInvalid,
-        http.Client.Response.ParseError.HttpHeaderContinuationsUnsupported,
-        http.Client.Response.ParseError.HttpTransferEncodingUnsupported,
-        http.Client.Response.ParseError.InvalidContentLength,
-        http.Client.Response.ParseError.CompressionUnsupported,
-        http.protocol.HeadersParser.ReadError.HttpChunkInvalid,
-        => return FetchError.UnexpectedFetchFailure,
-    }).status;
-    switch (status) {
+        .keep_alive = true,
+    }) catch |err| return httpToFetchError(err);
+    defer req.deinit();
+
+    // TODO: Support payload for POST requests
+    if (payload) |p| {
+        _ = p;
+        // req.transfer_encoding = .{ .content_length = p.len };
+        @panic("Payloads are not yet supported");
+    }
+    req.send() catch |err| return httpToFetchError(err);
+    if (payload) |p| {
+        _ = p;
+        // try req.writeAll(p);
+    }
+    req.finish() catch |err| return httpToFetchError(err);
+    req.wait() catch |err| return httpToFetchError(err);
+
+    switch (req.response.status) {
         .ok => {},
         .forbidden => return FetchError.BadApiKey,
         .not_found => return FetchError.NotFound,
@@ -208,22 +251,84 @@ pub fn fetch(
         else => return FetchError.UnexpectedFetchFailure,
     }
 
-    return json.parseFromSlice(
-        Response,
-        allocator,
-        res_buffer.items,
-        .{
-            .allocate = .alloc_always,
-            .ignore_unknown_fields = options.json_ignore_unknown_fields,
-            .duplicate_field_behavior = options.json_duplicate_field_behavior,
-        },
-    ) catch |err| switch (err) {
-        error.OutOfMemory => FetchError.OutOfMemory,
-        else => FetchError.InvalidJsonResponse,
+    var body_reader = json.reader(allocator, req.reader());
+    defer body_reader.deinit();
+    const parsed = json.parseFromTokenSource(T, allocator, &body_reader, .{
+        .allocate = .alloc_always,
+        .ignore_unknown_fields = options.json_ignore_unknown_fields,
+        .duplicate_field_behavior = options.json_duplicate_field_behavior,
+    }) catch |err| switch (err) {
+        error.OutOfMemory => return FetchError.OutOfMemory,
+        else => return FetchError.InvalidJsonResponse,
+    };
+    errdefer parsed.deinit();
+
+    return .{
+        .arena = parsed.arena,
+        .headers = ResponseHeaders.parse(req.response.parser.get()) catch
+            return FetchError.UnexpectedFetchFailure,
+        .value = parsed.value,
     };
 }
 
-fn toFetchError(err: datatypes.JsonConversionError) FetchError {
+const HttpError = http.Client.RequestError ||
+    http.Client.Request.SendError ||
+    http.Client.Request.WriteError ||
+    http.Client.Request.FinishError ||
+    http.Client.Request.WaitError;
+fn httpToFetchError(err: HttpError) FetchError {
+    switch (err) {
+        http.Client.RequestError.InvalidCharacter,
+        http.Client.RequestError.Overflow,
+        http.Client.RequestError.UnsupportedTransferEncoding,
+        http.Client.RequestError.UnsupportedUriScheme, // Checked in `init`
+        http.Client.RequestError.UriMissingHost, // Checked in `init`
+        http.Client.Request.WriteError.MessageTooLong,
+        http.Client.Request.WriteError.NotWriteable,
+        http.Client.Request.FinishError.MessageNotCompleted,
+        http.Client.Request.WaitError.HttpConnectionHeaderUnsupported,
+        => unreachable,
+
+        http.Client.RequestError.ConnectionRefused,
+        http.Client.RequestError.ConnectionResetByPeer,
+        http.Client.RequestError.ConnectionTimedOut,
+        http.Client.RequestError.HostLacksNetworkAddresses,
+        http.Client.RequestError.NameServerFailure,
+        http.Client.RequestError.NetworkUnreachable,
+        http.Client.RequestError.OutOfMemory,
+        http.Client.RequestError.TemporaryNameServerFailure,
+        http.Client.RequestError.TlsInitializationFailed,
+        http.Client.RequestError.UnexpectedConnectFailure,
+        http.Client.RequestError.UnknownHostName,
+        => return @errorCast(err),
+        http.Client.RequestError.CertificateBundleLoadFailure => return FetchError.TlsCertificateBundleLoadFailure,
+
+        // There usually isn't anything the user can do about these errors, as
+        // they arise from a bad server response or an unsupported feature in
+        // `http.Client`.
+        http.Client.Request.WriteError.UnexpectedWriteFailure,
+        http.Client.Request.WaitError.CompressionInitializationFailed,
+        http.Client.Request.WaitError.CompressionUnsupported,
+        http.Client.Request.WaitError.EndOfStream,
+        http.Client.Request.WaitError.HttpChunkInvalid,
+        http.Client.Request.WaitError.HttpHeaderContinuationsUnsupported,
+        http.Client.Request.WaitError.HttpHeadersInvalid,
+        http.Client.Request.WaitError.HttpHeadersOversize,
+        http.Client.Request.WaitError.HttpRedirectLocationInvalid,
+        http.Client.Request.WaitError.HttpRedirectLocationMissing,
+        http.Client.Request.WaitError.HttpTransferEncodingUnsupported,
+        http.Client.Request.WaitError.InvalidContentLength,
+        // TODO: Actually re-send instead of returning an error
+        http.Client.Request.WaitError.RedirectRequiresResend,
+        http.Client.Request.WaitError.TlsAlert,
+        http.Client.Request.WaitError.TlsFailure,
+        http.Client.Request.WaitError.TooManyHttpRedirects,
+        http.Client.Request.WaitError.UnexpectedReadFailure,
+        => return FetchError.UnexpectedFetchFailure,
+    }
+}
+
+fn conversionToFetchError(err: datatypes.JsonConversionError) FetchError {
     return switch (err) {
         datatypes.JsonConversionError.OutOfMemory => return FetchError.OutOfMemory,
         datatypes.JsonConversionError.InvalidTimestamp,
@@ -239,7 +344,7 @@ pub fn channelInfo(
     allocator: Allocator,
     id: []const u8,
     fetch_options: FetchOptions,
-) FetchError!json.Parsed(datatypes.ChannelFull) {
+) FetchError!Response(datatypes.ChannelFull) {
     const path = try fmt.allocPrint(allocator, "/channels/{s}", .{id});
     defer allocator.free(path);
     const parsed = try self.fetch(
@@ -257,8 +362,12 @@ pub fn channelInfo(
     arena.* = .init(allocator);
     errdefer arena.deinit();
 
-    const result = parsed.value.to(arena.allocator()) catch |err| return toFetchError(err);
-    return .{ .arena = arena, .value = result };
+    const result = parsed.value.to(arena.allocator()) catch |err| return conversionToFetchError(err);
+    return .{
+        .arena = arena,
+        .headers = parsed.headers,
+        .value = result,
+    };
 }
 
 /// Query options for `Api.videoInfo`.
@@ -295,7 +404,7 @@ pub fn videoInfo(
     allocator: Allocator,
     options: VideoInfoOptions,
     fetch_options: FetchOptions,
-) FetchError!json.Parsed(datatypes.VideoFull) {
+) FetchError!Response(datatypes.VideoFull) {
     const path = try fmt.allocPrint(allocator, "/videos/{s}", .{options.video_id});
     defer allocator.free(path);
     const parsed = try self.fetch(
@@ -313,8 +422,12 @@ pub fn videoInfo(
     arena.* = .init(allocator);
     errdefer arena.deinit();
 
-    const result = parsed.value.to(arena.allocator()) catch |err| return toFetchError(err);
-    return .{ .arena = arena, .value = result };
+    const result = parsed.value.to(arena.allocator()) catch |err| return conversionToFetchError(err);
+    return .{
+        .arena = arena,
+        .headers = parsed.headers,
+        .value = result,
+    };
 }
 
 /// Query options for `Api.listChannels`.
@@ -343,7 +456,7 @@ pub fn listChannels(
     allocator: Allocator,
     options: ListChannelsOptions,
     fetch_options: FetchOptions,
-) FetchError!json.Parsed([]datatypes.Channel) {
+) FetchError!Response([]datatypes.Channel) {
     assert(options.limit <= 50);
 
     const parsed = try self.fetch(
@@ -363,9 +476,13 @@ pub fn listChannels(
 
     const result = try arena.allocator().alloc(datatypes.Channel, parsed.value.len);
     for (parsed.value, 0..) |channel, i| {
-        result[i] = channel.to(arena.allocator()) catch |err| return toFetchError(err);
+        result[i] = channel.to(arena.allocator()) catch |err| return conversionToFetchError(err);
     }
-    return .{ .arena = arena, .value = result };
+    return .{
+        .arena = arena,
+        .headers = parsed.headers,
+        .value = result,
+    };
 }
 
 /// Create a pager that iterates over the results of `Api.listChannels`.

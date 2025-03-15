@@ -9,16 +9,16 @@ const Api = @import("root.zig").Api;
 /// `Query` must be a struct that contains an `offset` field of an integer type.
 /// `deinit` must be called to free the memory used by the pager.
 pub fn Pager(
-    comptime Response: type,
+    comptime T: type,
     comptime Query: type,
-    comptime apiFn: fn (*Api, Allocator, Query, Api.FetchOptions) Api.FetchError!json.Parsed([]Response),
+    comptime apiFn: fn (*Api, Allocator, Query, Api.FetchOptions) Api.FetchError!Api.Response([]T),
 ) type {
     return struct {
         allocator: Allocator,
         api: *Api,
         query: Query,
         options: Api.FetchOptions,
-        responses: ?json.Parsed([]Response) = null,
+        responses: ?Api.Response([]T) = null,
         responses_index: usize = 0,
 
         pub fn deinit(self: *@This()) void {
@@ -30,7 +30,7 @@ pub fn Pager(
         /// Return the next result, or `null` if there are no more results.
         /// The caller does not own the memory of the returned value.
         /// `deinit` must be called to free the memory used by the pager.
-        pub fn next(self: *@This()) Api.FetchError!?Response {
+        pub fn next(self: *@This()) Api.FetchError!?T {
             try self.tryNextPage();
             if (self.responses.?.value.len == 0) {
                 return null;
@@ -64,6 +64,15 @@ pub fn Pager(
             self.responses_index = 0;
             self.query.offset += @intCast(new_responses.value.len);
         }
+
+        /// Return the headers of the last response, or `null` if there was no
+        /// last response.
+        pub fn lastResponseHeaders(self: @This()) ?Api.ResponseHeaders {
+            if (self.responses) |res| {
+                return res.headers;
+            }
+            return null;
+        }
     };
 }
 
@@ -78,7 +87,7 @@ test Pager {
     const apiFn = (struct {
         const MAX = 14; // Inclusive
 
-        pub fn apiFn(_: *Api, allocator: Allocator, query: Query, _: Api.FetchOptions) !json.Parsed([]T) {
+        pub fn apiFn(_: *Api, allocator: Allocator, query: Query, _: Api.FetchOptions) !Api.Response([]T) {
             const arena = try allocator.create(std.heap.ArenaAllocator);
             arena.* = std.heap.ArenaAllocator.init(testing.allocator);
 
@@ -87,8 +96,9 @@ test Pager {
                 value[i] = (query.offset + @as(T, @intCast(i))) * query.mul;
             }
 
-            return json.Parsed([]T){
+            return .{
                 .arena = arena,
+                .headers = undefined,
                 .value = value[0..@min(value.len, (MAX / query.mul) + 1 - query.offset)],
             };
         }
