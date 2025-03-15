@@ -76,10 +76,14 @@ pub const format = holodex.defaultFormat(@This(), struct {
     }
 });
 
-/// Type of a video. Either a stream or a clip.
+/// Type of a video.
 pub const Type = enum {
+    /// Stream or video uploaded by a VTuber.
     stream,
+    /// Clip made by a clipper.
     clip,
+    /// Placeholder with no corresponding video on YouTube.
+    placeholder,
 };
 
 /// Status of a video.
