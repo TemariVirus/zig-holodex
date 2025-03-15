@@ -18,10 +18,12 @@ end: datatypes.VideoOffset,
 /// URL to the song's cover art.
 art: []const u8,
 /// iTunes ID of the song.
-itunes_id: u64,
+itunes_id: ItunesId,
 
 const Self = @This();
 pub const format = holodex.defaultFormat(@This(), struct {});
+
+pub const ItunesId = enum(u64) { _ };
 
 /// The JSON representation of a `Song`.
 pub const Json = struct {
@@ -31,7 +33,7 @@ pub const Json = struct {
     start: datatypes.VideoOffset,
     end: datatypes.VideoOffset,
     art: []const u8,
-    itunesid: u64,
+    itunesid: ItunesId,
 
     /// Convert to a `Song`. This function leaks memory when returning an error.
     /// Use an arena allocator to free memory properly.
