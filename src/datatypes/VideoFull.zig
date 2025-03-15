@@ -46,7 +46,7 @@ simulcasts: ?[]const VideoMin = null,
 /// VTubers featured in this video.
 mentions: ?[]const datatypes.Vtuber = null,
 /// Comments with timestamps on the video.
-timestamp_comments: ?[]const Comment = null,
+timestamp_comments: ?[]const datatypes.Comment = null,
 
 const Self = @This();
 pub const format = holodex.defaultFormat(@This(), struct {
@@ -107,31 +107,6 @@ pub const LiveInfo = struct {
     live_viewers: u64,
 };
 
-/// A comment with a timestamp(s) on a video.
-pub const Comment = struct {
-    /// YouTube id of the comment.
-    id: []const u8,
-    /// Content of the comment.
-    content: []const u8,
-
-    pub const format = holodex.defaultFormat(@This(), struct {});
-
-    /// The JSON representation of a `Comment`.
-    pub const Json = struct {
-        comment_key: []const u8,
-        message: []const u8,
-
-        /// Convert to a `Comment`. This function leaks memory when returning an error.
-        /// Use an arena allocator to free memory properly.
-        pub fn to(self: @This(), allocator: std.mem.Allocator) datatypes.JsonConversionError!Comment {
-            return .{
-                .id = try holodex.deepCopy(allocator, self.comment_key),
-                .content = try holodex.deepCopy(allocator, self.message),
-            };
-        }
-    };
-};
-
 /// The JSON representation of a `VideoFull`.
 pub const Json = struct {
     id: []const u8,
@@ -168,9 +143,13 @@ pub const Json = struct {
     // Only returned when 'includes' contains 'mentions'
     mentions: ?[]const datatypes.Vtuber.Json = null,
     // Only returned when c === '1', comments with timestamps only
-    comments: ?[]const Comment.Json = null,
+    comments: ?[]const datatypes.Comment.Json = null,
 
-    fn toOptionalArray(Child: type, allocator: std.mem.Allocator, array: ?[]const Child.Json) datatypes.JsonConversionError!?[]Child {
+    fn toOptionalArray(
+        Child: type,
+        allocator: std.mem.Allocator,
+        array: ?[]const Child.Json,
+    ) datatypes.JsonConversionError!?[]Child {
         if (array) |arr| {
             const converted = try allocator.alloc(Child, arr.len);
             for (0..arr.len) |i| {
@@ -230,7 +209,7 @@ pub const Json = struct {
             .refers = try toOptionalArray(VideoMin, allocator, self.refers),
             .simulcasts = try toOptionalArray(VideoMin, allocator, self.simulcasts),
             .mentions = try toOptionalArray(datatypes.Vtuber, allocator, self.mentions),
-            .timestamp_comments = try toOptionalArray(Comment, allocator, self.comments),
+            .timestamp_comments = try toOptionalArray(datatypes.Comment, allocator, self.comments),
         };
     }
 };
