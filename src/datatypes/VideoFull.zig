@@ -10,7 +10,7 @@ const VideoMin = datatypes.VideoMin;
 id: []const u8,
 /// YouTube video title.
 title: []const u8,
-/// Type of the video. Either a stream or a clip.
+/// Type of the video.
 type: Type,
 /// Topic of the video (from Holodex).
 topic: ?datatypes.Topic = null,
@@ -46,7 +46,7 @@ simulcasts: ?[]const VideoMin = null,
 /// VTubers featured in this video.
 mentions: ?[]const datatypes.Vtuber = null,
 /// Comments with timestamps on the video.
-timestamp_comments: ?[]const datatypes.Comment = null,
+timestamp_comments: ?[]const TimestampComment = null,
 
 const Self = @This();
 pub const format = holodex.defaultFormat(@This(), struct {
@@ -115,7 +115,7 @@ pub const Channel = struct {
     name: []const u8,
     /// English name of the channel/channel owner.
     english_name: ?datatypes.EnglishName = null,
-    /// Type of the channel. Ether a VTuber or a subber.
+    /// Type of the channel.
     type: datatypes.ChannelFull.Type,
     /// VTuber organization the channel is part of.
     org: ?datatypes.Organization = null,
@@ -189,6 +189,33 @@ pub const Channel = struct {
     };
 };
 
+/// A comment with a timestamp(s) on a video.
+pub const TimestampComment = struct {
+    /// YouTube id of the comment. Navigating to
+    /// `https://www.youtube.com/watch?v={video.id}&lc={id}` highlights the comment.
+    id: []const u8,
+    /// Content of the comment.
+    content: []const u8,
+
+    const Self = @This();
+    pub const format = holodex.defaultFormat(@This(), struct {});
+
+    /// The JSON representation of a `TimestampComment`.
+    pub const Json = struct {
+        comment_key: []const u8,
+        message: []const u8,
+
+        /// Convert to a `Comment`. This function leaks memory when returning an error.
+        /// Use an arena allocator to free memory properly.
+        pub fn to(self: @This(), allocator: std.mem.Allocator) datatypes.JsonConversionError!TimestampComment {
+            return .{
+                .id = try holodex.deepCopy(allocator, self.comment_key),
+                .content = try holodex.deepCopy(allocator, self.message),
+            };
+        }
+    };
+};
+
 /// The JSON representation of a `VideoFull`.
 pub const Json = struct {
     id: []const u8,
@@ -225,7 +252,7 @@ pub const Json = struct {
     // Only returned when 'includes' contains 'mentions'
     mentions: ?[]const datatypes.Vtuber.Json = null,
     // Only returned when c === '1', comments with timestamps only
-    comments: ?[]const datatypes.Comment.Json = null,
+    comments: ?[]const TimestampComment.Json = null,
 
     fn toOptionalArray(
         Child: type,
@@ -291,7 +318,7 @@ pub const Json = struct {
             .refers = try toOptionalArray(VideoMin, allocator, self.refers),
             .simulcasts = try toOptionalArray(VideoMin, allocator, self.simulcasts),
             .mentions = try toOptionalArray(datatypes.Vtuber, allocator, self.mentions),
-            .timestamp_comments = try toOptionalArray(datatypes.Comment, allocator, self.comments),
+            .timestamp_comments = try toOptionalArray(TimestampComment, allocator, self.comments),
         };
     }
 };
