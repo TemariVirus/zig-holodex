@@ -29,7 +29,7 @@ fn PrettyFormatter(comptime Writer: type) type {
             }
         }
 
-        fn writeFn(ctx: *const anyopaque, bytes: []const u8) anyerror!usize {
+        fn writeFn(ctx: *const anyopaque, bytes: []const u8) Writer.Error!usize {
             const self: *const @This() = @ptrCast(@alignCast(ctx));
             // Fast path
             if (!self.pretty_mode or self.indents == 0) {
@@ -68,38 +68,14 @@ fn StringWriter(comptime Writer: type) type {
     return struct {
         writer: Writer,
 
-        // This is solely used for padding in `std.fmt.formatBuf`. Leave it as is.
+        // This is solely used for padding in `std.fmt.formatBuf`.
         pub fn writeBytesNTimes(self: @This(), fill: []const u8, padding: usize) !void {
             try self.writer.writeBytesNTimes(fill, padding);
         }
 
         // This is solely used for writing `buf` in `std.fmt.formatBuf`.
-        // Add quotes, and escape characters.
         pub fn writeAll(self: @This(), buf: []const u8) !void {
-            try self.writer.writeAll("\"");
-
-            var start: usize = 0;
-            var end: usize = 0;
-            while (end < buf.len) {
-                const c = buf[end];
-                const len = try std.unicode.utf8ByteSequenceLength(c);
-                if (try std.unicode.utf8ByteSequenceLength(c) != 1) {
-                    end += len;
-                    continue;
-                }
-
-                const escapes = "\t\n\r\"\\";
-                const replaces = [escapes.len][]const u8{ "\\t", "\\n", "\\r", "\\\"", "\\\\" };
-                if (mem.indexOfScalar(u8, escapes, c)) |i| {
-                    try self.writer.writeAll(buf[start..end]);
-                    try self.writer.writeAll(replaces[i]);
-                    start = end + 1;
-                }
-                end += 1;
-            }
-
-            try self.writer.writeAll(buf[start..]);
-            try self.writer.writeAll("\"");
+            try std.json.encodeJsonString(buf, .{ .escape_unicode = false }, self.writer);
         }
     };
 }
@@ -127,46 +103,23 @@ fn format(
     }
 
     const string_writer = StringWriter(@TypeOf(writer)){ .writer = writer };
-    switch (@typeInfo(T)) {
+    const simple_type_fmt = switch (@typeInfo(T)) {
         .comptime_int,
         .int,
         .comptime_float,
         .float,
-        => return std.fmt.formatType(
-            value,
-            if (is_raw or is_pretty) "" else fmt,
-            options,
-            writer,
-            max_depth,
-        ),
-        .bool => return formatBuf(if (value) "true" else "false", options, writer),
+        => if (is_raw or is_pretty) "" else fmt,
+        .bool => "",
+        .@"enum" => |info| if (info.is_exhaustive or is_raw or is_pretty) "" else fmt,
+        else => fmt,
+    };
+    switch (@typeInfo(T)) {
         .optional => {
             if (value) |payload| {
                 return format(payload, fmt, options, pretty_formatter, Overwrites, max_depth, false);
             } else {
                 return formatBuf("null", options, writer);
             }
-        },
-        .@"enum" => |enumInfo| {
-            if (enumInfo.is_exhaustive) {
-                try writer.writeAll(".");
-                try writer.writeAll(@tagName(value));
-                return;
-            }
-
-            // Use @tagName only if value is one of known fields
-            @setEvalBranchQuota(3 * enumInfo.fields.len);
-            inline for (enumInfo.fields) |enumField| {
-                if (@intFromEnum(value) == enumField.value) {
-                    try writer.writeAll(".");
-                    try writer.writeAll(@tagName(value));
-                    return;
-                }
-            }
-
-            try writer.writeAll("(");
-            try format(@intFromEnum(value), fmt, options, pretty_formatter, struct {}, max_depth, false);
-            try writer.writeAll(")");
         },
         .@"union" => |info| {
             try writer.writeAll(@typeName(T));
@@ -260,7 +213,7 @@ fn format(
                 ),
             },
             .many, .c => {
-                if (ptr_info.sentinel) |_| {
+                if (ptr_info.sentinel()) |_| {
                     return format(mem.span(value), fmt, options, pretty_formatter, Overwrites, max_depth, false);
                 }
                 if (ptr_info.child == u8 and !is_raw) {
@@ -291,13 +244,7 @@ fn format(
             },
         },
         .array => |_| return format(&value, fmt, options, pretty_formatter, Overwrites, max_depth, false),
-        .@"fn" => @compileError("unable to format function body type, use '*const " ++ @typeName(T) ++ "' for a function pointer type"),
-        .enum_literal => {
-            const buffer = [_]u8{'.'} ++ @tagName(value);
-            return formatBuf(buffer, options, writer);
-        },
-        .null => return formatBuf("null", options, writer),
-        else => @compileError("unable to format type '" ++ @typeName(T) ++ "'"),
+        else => return std.fmt.formatType(value, simple_type_fmt, options, writer, max_depth),
     }
 }
 
