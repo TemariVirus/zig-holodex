@@ -8,7 +8,7 @@ An Idiomatic Zig library for the Holodex API with pretty formatting.
 - [ ] GET /videos
 - [x] GET /channels/{channelId}
 - [ ] GET /channels/{channelId}/{type}
-- [ ] GET /users/live
+- [x] GET /users/live
 - [x] GET /videos/{videoId}
 - [x] GET /channels
 - [ ] POST /search/videoSearch

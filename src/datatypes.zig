@@ -7,6 +7,7 @@ pub const ChannelFull = @import("datatypes/ChannelFull.zig");
 pub const Comment = @import("datatypes/Comment.zig");
 pub const Song = @import("datatypes/Song.zig");
 pub const Uuid = @import("datatypes/Uuid.zig");
+pub const Video = @import("datatypes/Video.zig");
 pub const VideoFull = @import("datatypes/VideoFull.zig");
 pub const VideoMin = @import("datatypes/VideoMin.zig");
 pub const Vtuber = @import("datatypes/Vtuber.zig");

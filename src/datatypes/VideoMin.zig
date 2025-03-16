@@ -9,7 +9,7 @@ const datatypes = holodex.datatypes;
 id: []const u8,
 /// Language of the video. The translated language if the video is a subbed clip.
 lang: ?datatypes.Language = null,
-/// Type of the video. Either a stream or a clip.
+/// Type of the video.
 type: datatypes.VideoFull.Type,
 /// YouTube video title.
 title: []const u8,

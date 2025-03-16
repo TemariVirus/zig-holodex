@@ -338,6 +338,33 @@ fn conversionToFetchError(err: datatypes.JsonConversionError) FetchError {
     };
 }
 
+/// Fetch currently upcoming or live streams. This corresponds to the `/live`
+/// endpoint. This is somewhat similar to calling `videos` but with default
+/// options, and `live_info` is always included.
+pub fn live(
+    self: *Self,
+    allocator: Allocator,
+    fetch_options: FetchOptions,
+) FetchError!Response([]datatypes.VideoFull) {
+    _ = self;
+    _ = allocator;
+    _ = fetch_options;
+    @compileError("TODO: Implement");
+}
+
+/// Fetch videos satisfying the given options. This corresponds to the
+/// `/videos` endpoint.
+pub fn videos(
+    self: *Self,
+    allocator: Allocator,
+    fetch_options: FetchOptions,
+) FetchError!Response([]datatypes.VideoFull) {
+    _ = self;
+    _ = allocator;
+    _ = fetch_options;
+    @compileError("TODO: Implement");
+}
+
 /// Fetch information about a YouTube channel. This corresponds to the
 /// `/channels/{channelId}` endpoint.
 pub fn channelInfo(
@@ -364,6 +391,45 @@ pub fn channelInfo(
     errdefer arena.deinit();
 
     const result = parsed.value.to(arena.allocator()) catch |err| return conversionToFetchError(err);
+    return .{
+        .arena = arena,
+        .headers = parsed.headers,
+        .value = result,
+    };
+}
+
+/// Fetch currently upcoming or live streams for a set of channels. This
+/// corresponds to the `/users/live` endpoint. This is similar to calling
+/// `live` but replies much faster at the cost of customizability. Note that
+/// the option `max_upcoming_hours=48` does not appear to be carried over from
+/// `live`.
+pub fn channelsLive(
+    self: *Self,
+    allocator: Allocator,
+    channel_ids: []const []const u8,
+    fetch_options: FetchOptions,
+) FetchError!Response([]datatypes.Video) {
+    // const Options = struct { channels: []const []const u8 };
+
+    const parsed = try self.fetch(
+        []datatypes.Video.Json,
+        allocator,
+        .GET,
+        "/users/live",
+        .{ .channels = channel_ids },
+        null,
+        fetch_options,
+    );
+    defer parsed.deinit();
+
+    var arena = try allocator.create(std.heap.ArenaAllocator);
+    arena.* = .init(allocator);
+    errdefer arena.deinit();
+
+    const result = try arena.allocator().alloc(datatypes.Video, parsed.value.len);
+    for (parsed.value, 0..) |video, i| {
+        result[i] = video.to(arena.allocator()) catch |err| return conversionToFetchError(err);
+    }
     return .{
         .arena = arena,
         .headers = parsed.headers,
