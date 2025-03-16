@@ -89,7 +89,12 @@ pub const Duration = enum(u32) {
             return;
         }
 
-        try std.fmt.fmtDuration(@as(u64, self.seconds()) * std.time.ns_per_s).format(fmt, options, writer);
+        if (self.seconds() == 0) {
+            // Using `std.fmt.fmtDuration` will print `0ns` instead
+            try std.fmt.formatBuf("0s", options, writer);
+        } else {
+            try std.fmt.fmtDuration(@as(u64, self.seconds()) * std.time.ns_per_s).format(fmt, options, writer);
+        }
     }
 
     pub fn add(self: Duration, other: Duration) Duration {
