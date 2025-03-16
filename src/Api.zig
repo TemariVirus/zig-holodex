@@ -441,21 +441,16 @@ pub fn channelsLive(
 pub const VideoInfoOptions = struct {
     /// The YouTube video ID.
     video_id: []const u8,
-    /// Filter channels/clips. official streams do not follow this parameter.
-    lang: ?[]const datatypes.Language = &.{datatypes.Languages.all},
     /// Whether to include timestamp comments.
     comments: bool = false,
 };
 /// The Holodex API version of `VideoInfoOptions`.
 const VideoInfoOptionsApi = struct {
-    /// Corresponds to the `lang` field.
-    lang: ?[]const datatypes.Language,
     /// Corresponds to the `comments` field.
     c: enum { @"0", @"1" },
 
     pub fn from(options: VideoInfoOptions) VideoInfoOptionsApi {
         return VideoInfoOptionsApi{
-            .lang = options.lang,
             .c = switch (options.comments) {
                 false => .@"0",
                 true => .@"1",
