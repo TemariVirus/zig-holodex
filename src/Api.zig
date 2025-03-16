@@ -11,6 +11,12 @@ const holodex = @import("root.zig");
 const datatypes = holodex.datatypes;
 const Pager = holodex.Pager;
 
+const package_version = @import("lib").version;
+const user_agent_string = std.fmt.comptimePrint(
+    "zig-holodex/{s} (zig/{s})",
+    .{ package_version, @import("builtin").zig_version_string },
+);
+
 /// The API key to use for requests.
 api_key: []const u8,
 /// The base URI of the API.
@@ -221,6 +227,9 @@ pub fn fetch(
     var server_header_buffer: [16 * 1024]u8 = undefined;
     var req = self.client.open(method, uri, .{
         .server_header_buffer = &server_header_buffer,
+        .headers = .{
+            .user_agent = .{ .override = user_agent_string },
+        },
         .extra_headers = &.{.{
             .name = "X-APIKEY",
             .value = self.api_key,
