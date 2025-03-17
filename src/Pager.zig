@@ -5,19 +5,19 @@ const testing = std.testing;
 
 const Api = @import("root.zig").Api;
 
-/// A pager that iterates over the results of a query.
-/// `Query` must be a struct that contains an `offset` field of an integer type.
+/// A pager that iterates over the results of an endpoint.
+/// `Options` must be a struct that contains an `offset` field of an integer type.
 /// `deinit` must be called to free the memory used by the pager.
 pub fn Pager(
     comptime T: type,
-    comptime Query: type,
-    comptime apiFn: fn (*Api, Allocator, Query, Api.FetchOptions) Api.FetchError!Api.Response([]T),
+    comptime Options: type,
+    comptime apiFn: fn (*Api, Allocator, Options, Api.FetchOptions) Api.FetchError!Api.Response([]T),
 ) type {
     return struct {
         allocator: Allocator,
         api: *Api,
-        query: Query,
-        options: Api.FetchOptions,
+        options: Options,
+        fetch_options: Api.FetchOptions,
         responses: ?Api.Response([]T) = null,
         responses_index: usize = 0,
 
@@ -39,13 +39,13 @@ pub fn Pager(
         /// Return the index of the current item, starting from 0.
         pub fn currentIndex(self: @This()) usize {
             const page_len = if (self.responses) |res| res.value.len else 0;
-            return self.query.offset - page_len + self.responses_index -| 1;
+            return self.options.offset - page_len + self.responses_index -| 1;
         }
 
         /// Return the current page number, starting from 0. Assumes that
-        /// `query.limit` has not changed after initialization.
+        /// `options.limit` has not changed after initialization.
         pub fn currentPage(self: @This()) usize {
-            return @divExact(self.query.offset, self.query.limit) -| 1;
+            return @divExact(self.options.offset, self.options.limit) -| 1;
         }
 
         /// Return the next result, or `null` if there are no more results.
@@ -75,22 +75,22 @@ pub fn Pager(
             const new_responses = try apiFn(
                 self.api,
                 self.allocator,
-                self.query,
                 self.options,
+                self.fetch_options,
             );
             if (self.responses) |responses| {
                 responses.deinit();
             }
             self.responses = new_responses;
             self.responses_index = 0;
-            self.query.offset += @intCast(new_responses.value.len);
+            self.options.offset += @intCast(new_responses.value.len);
         }
     };
 }
 
 test Pager {
     const T = u32;
-    const Query = struct {
+    const Options = struct {
         mul: T,
         offset: T,
     };
@@ -99,30 +99,30 @@ test Pager {
     const apiFn = (struct {
         const MAX = 14; // Inclusive
 
-        pub fn apiFn(_: *Api, allocator: Allocator, query: Query, _: Api.FetchOptions) !Api.Response([]T) {
+        pub fn apiFn(_: *Api, allocator: Allocator, options: Options, _: Api.FetchOptions) !Api.Response([]T) {
             const arena = try allocator.create(std.heap.ArenaAllocator);
             arena.* = std.heap.ArenaAllocator.init(testing.allocator);
 
             const value = try arena.allocator().alloc(T, 2);
             for (0..value.len) |i| {
-                value[i] = (query.offset + @as(T, @intCast(i))) * query.mul;
+                value[i] = (options.offset + @as(T, @intCast(i))) * options.mul;
             }
 
             return .{
                 .arena = arena,
                 .headers = undefined,
-                .value = value[0..@min(value.len, (MAX / query.mul) + 1 - query.offset)],
+                .value = value[0..@min(value.len, (MAX / options.mul) + 1 - options.offset)],
             };
         }
     }).apiFn;
 
     var api = Api.init(testing.allocator, .{ .api_key = "Bae's key" }) catch unreachable;
     defer api.deinit();
-    var pager = Pager(T, Query, apiFn){
+    var pager = Pager(T, Options, apiFn){
         .allocator = testing.allocator,
         .api = &api,
-        .query = Query{ .mul = 2, .offset = 3 },
-        .options = .{},
+        .options = Options{ .mul = 2, .offset = 3 },
+        .fetch_options = .{},
     };
     defer pager.deinit();
 

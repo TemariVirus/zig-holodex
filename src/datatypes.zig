@@ -4,6 +4,8 @@ const zeit = @import("zeit");
 // TODO: implement jsonParse directly instead of parsing and copying
 pub const Channel = @import("datatypes/Channel.zig");
 pub const ChannelFull = @import("datatypes/ChannelFull.zig");
+pub const Comment = @import("datatypes/Comment.zig");
+pub const SearchedVideo = @import("datatypes/SearchedVideo.zig");
 pub const Song = @import("datatypes/Song.zig");
 pub const Uuid = @import("datatypes/Uuid.zig");
 pub const Video = @import("datatypes/Video.zig");

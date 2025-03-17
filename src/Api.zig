@@ -1,3 +1,5 @@
+// TODO: Test thread safety
+
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
@@ -64,6 +66,13 @@ pub const FetchError = http.Client.ConnectTcpError || error{
 pub const SortOrder = enum {
     asc,
     desc,
+};
+
+/// How to sort search results.
+pub const SearchOrder = enum {
+    oldest,
+    newest,
+    longest,
 };
 
 pub const ResponseHeaders = struct {
@@ -142,6 +151,15 @@ pub fn Response(comptime T: type) type {
     };
 }
 
+pub fn WithTotal(comptime T: type) type {
+    return struct {
+        total: u64,
+        items: T,
+
+        pub const format = holodex.defaultFormat(@This(), struct {});
+    };
+}
+
 pub const InitOptions = struct {
     /// The API key to use for requests. This value must outlive it's `Api` instance.
     api_key: []const u8,
@@ -210,6 +228,15 @@ pub fn fetch(
     payload: anytype,
     options: FetchOptions,
 ) FetchError!Response(T) {
+    const stringify_options: json.StringifyOptions = .{
+        .emit_nonportable_numbers_as_strings = false,
+        // Skip null optional fields to save network bandwidth.
+        .emit_null_optional_fields = false,
+        .emit_strings_as_arrays = false,
+        .escape_unicode = false,
+        .whitespace = .minified,
+    };
+
     var uri = self.base_uri;
     uri.path.percent_encoded = try fmt.allocPrint(
         allocator,
@@ -229,6 +256,7 @@ pub fn fetch(
         .server_header_buffer = &server_header_buffer,
         .headers = .{
             .user_agent = .{ .override = user_agent_string },
+            .content_type = .{ .override = "application/json" },
         },
         .extra_headers = &.{.{
             .name = "X-APIKEY",
@@ -238,16 +266,18 @@ pub fn fetch(
     }) catch |err| return httpToFetchError(err);
     defer req.deinit();
 
-    // TODO: Support payload for POST requests
     if (payload) |p| {
-        _ = p;
-        // req.transfer_encoding = .{ .content_length = p.len };
-        @panic("Payloads are not yet supported");
+        req.transfer_encoding = .{
+            .content_length = countJsonLen(p, stringify_options),
+        };
     }
     req.send() catch |err| return httpToFetchError(err);
     if (payload) |p| {
-        _ = p;
-        // try req.writeAll(p);
+        json.stringify(
+            p,
+            stringify_options,
+            req.writer(),
+        ) catch |err| return httpToFetchError(err);
     }
     req.finish() catch |err| return httpToFetchError(err);
     req.wait() catch |err| return httpToFetchError(err);
@@ -278,6 +308,12 @@ pub fn fetch(
             return FetchError.UnexpectedFetchFailure,
         .value = parsed.value,
     };
+}
+
+fn countJsonLen(value: anytype, options: json.StringifyOptions) u64 {
+    var counter = std.io.countingWriter(std.io.null_writer);
+    json.stringify(value, options, counter.writer()) catch unreachable;
+    return counter.bytes_written;
 }
 
 const HttpError = http.Client.RequestError ||
@@ -508,7 +544,7 @@ pub const ListChannelsOptions = struct {
     /// Offset to start at.
     offset: u64 = 0,
     /// Maximum number of channels to return. Must be greater than 0, and less
-    /// than or equal to 100.
+    /// than or equal to `max_limit`.
     limit: usize = 25,
     /// If not null, filter VTubers belonging to this organization.
     org: ?datatypes.Organization = null,
@@ -518,19 +554,29 @@ pub const ListChannelsOptions = struct {
     sort: meta.FieldEnum(datatypes.Channel) = .org,
     /// Sort order.
     order: SortOrder = .asc,
+
+    pub const max_limit: usize = 100;
 };
 
 /// List channels that match the given options. This corresponds to the
 /// `/channels` endpoint. Use `Api.pageChannels` to page through the results
-/// instead.
+/// instead. The total amount of items is not directly reported by the API.
 pub fn listChannels(
     self: *Self,
     allocator: Allocator,
     options: ListChannelsOptions,
     fetch_options: FetchOptions,
 ) (FetchError || error{InvalidLimit})!Response([]datatypes.Channel) {
-    if (options.limit <= 0 or options.limit > 100) return error.InvalidLimit;
+    if (options.limit <= 0 or options.limit > ListChannelsOptions.max_limit) return error.InvalidLimit;
+    return self.listChannelsAssumeLimit(allocator, options, fetch_options);
+}
 
+fn listChannelsAssumeLimit(
+    self: *Self,
+    allocator: Allocator,
+    options: ListChannelsOptions,
+    fetch_options: FetchOptions,
+) FetchError!Response([]datatypes.Channel) {
     const parsed = try self.fetch(
         []datatypes.Channel.Json,
         allocator,
@@ -564,11 +610,203 @@ pub fn pageChannels(
     allocator: Allocator,
     options: ListChannelsOptions,
     fetch_options: FetchOptions,
-) Pager(datatypes.Channel, ListChannelsOptions, listChannels) {
-    return Pager(datatypes.Channel, ListChannelsOptions, listChannels){
+) error{InvalidLimit}!Pager(datatypes.Channel, ListChannelsOptions, listChannelsAssumeLimit) {
+    if (options.limit <= 0 or options.limit > ListChannelsOptions.max_limit) return error.InvalidLimit;
+    return Pager(datatypes.Channel, ListChannelsOptions, listChannelsAssumeLimit){
         .allocator = allocator,
         .api = self,
-        .query = options,
-        .options = fetch_options,
+        .options = options,
+        .fetch_options = fetch_options,
+    };
+}
+
+/// Options for `Api.searchComments` and `Api.searchCommentsWithTotal`.
+pub const SearchCommentsOptions = struct {
+    /// Search for comments containing this string (case insensitive).
+    comment: []const u8,
+    /// How to sort comments (based on the video they belong to).
+    sort: SearchOrder = .newest,
+    // This only affects comments on clips, but comments on clips are not
+    // crawled, so this field has no effect.
+    // langs: []const datatypes.Language = &.{},
+    // Only comments on streams are crawled, so this field has no effect.
+    // types: []const datatypes.VideoFull.Type = &.{},
+    /// Only include videos of any of these topics. Leave empty to disable this
+    /// filter.
+    topics: []const datatypes.Topic = &.{},
+    /// Only include videos involving all of these channels. Leave empty to
+    /// disable this filter.
+    channels: []const []const u8 = &.{},
+    /// Only include videos involving Vtubers from all of these organizations.
+    /// Leave empty to disable this filter.
+    orgs: []const datatypes.Organization = &.{},
+    /// Offset to start at.
+    offset: u64 = 0,
+    /// Maximum number of channels to return. Must be greater than 0, and less
+    /// than or equal to `max_limit`.
+    limit: usize = 30,
+
+    pub const max_limit: usize = 100_000;
+};
+/// The Holodex API version of `SearchCommentsOptions`.
+const SearchCommentsOptionsApi = struct {
+    sort: SearchOrder,
+    comptime lang: ?[]const datatypes.Language = null,
+    comptime target: ?[]const datatypes.VideoFull.Type = null,
+    // Questionable design choice, but okay.
+    comment: [1][]const u8,
+    topic: ?[]const datatypes.Topic,
+    vch: ?[]const []const u8,
+    org: ?[]const datatypes.Organization,
+    offset: u64,
+    limit: usize,
+    paginated: bool,
+
+    pub fn from(options: SearchCommentsOptions, paginated: bool) SearchCommentsOptionsApi {
+        return SearchCommentsOptionsApi{
+            .sort = options.sort,
+            .comment = .{options.comment},
+            .topic = if (options.topics.len == 0) null else options.topics,
+            .vch = if (options.channels.len == 0) null else options.channels,
+            .org = if (options.orgs.len == 0) null else options.orgs,
+            .offset = options.offset,
+            .limit = options.limit,
+            .paginated = paginated,
+        };
+    }
+};
+
+/// Search for timestamp comments in streams matching the given options. This
+/// corresponds to the `/search/commentSearch` endpoint.
+///
+/// - Use `Api.searchCommentsWithTotal` to get the comments with a total.
+/// - Use `Api.pageSearchComments` to page through the results without a total.
+pub fn searchComments(
+    self: *Self,
+    allocator: Allocator,
+    options: SearchCommentsOptions,
+    fetch_options: FetchOptions,
+) (FetchError || error{InvalidLimit})!Response([]datatypes.Comment) {
+    if (options.limit <= 0 or options.limit > SearchCommentsOptions.max_limit) return error.InvalidLimit;
+    return self.searchCommentsAssumeLimit(allocator, options, fetch_options);
+}
+
+fn searchCommentsAssumeLimit(
+    self: *Self,
+    allocator: Allocator,
+    options: SearchCommentsOptions,
+    fetch_options: FetchOptions,
+) FetchError!Response([]datatypes.Comment) {
+    const parsed = try self.fetch(
+        []datatypes.SearchedVideo.Json,
+        allocator,
+        .POST,
+        "/search/commentSearch",
+        empty_query,
+        @as(?SearchCommentsOptionsApi, SearchCommentsOptionsApi.from(options, false)),
+        fetch_options,
+    );
+    defer parsed.deinit();
+
+    var arena = try allocator.create(std.heap.ArenaAllocator);
+    arena.* = .init(allocator);
+    errdefer arena.deinit();
+
+    const comments = try searchCommentsInner(arena, parsed.value);
+    return .{
+        .arena = arena,
+        .headers = parsed.headers,
+        .value = comments,
+    };
+}
+
+/// The same as `Api.searchComments`, but includes the total number of comments
+/// matching the given options.
+///
+/// - Use `Api.searchComments` to get the comments without a total.
+/// - Use `Api.pageSearchComments` to page through the results without a total.
+pub fn searchCommentsWithTotal(
+    self: *Self,
+    allocator: Allocator,
+    options: SearchCommentsOptions,
+    fetch_options: FetchOptions,
+) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.Comment)) {
+    if (options.limit <= 0 or options.limit > 100_000) return error.InvalidLimit;
+
+    const parsed = try self.fetch(
+        WithTotal([]datatypes.SearchedVideo.Json),
+        allocator,
+        .POST,
+        "/search/commentSearch",
+        empty_query,
+        @as(?SearchCommentsOptionsApi, SearchCommentsOptionsApi.from(options, true)),
+        fetch_options,
+    );
+    defer parsed.deinit();
+
+    var arena = try allocator.create(std.heap.ArenaAllocator);
+    arena.* = .init(allocator);
+    errdefer arena.deinit();
+
+    const comments = try searchCommentsInner(arena, parsed.value.items);
+    return .{
+        .arena = arena,
+        .headers = parsed.headers,
+        .value = .{
+            .total = parsed.value.total,
+            .items = comments,
+        },
+    };
+}
+
+/// Common code for `searchCommentsAssumeLimit` and `searchCommentsWithTotal`.
+fn searchCommentsInner(
+    arena: *std.heap.ArenaAllocator,
+    parsed: []datatypes.SearchedVideo.Json,
+) FetchError![]datatypes.Comment {
+    const comment_count = blk: {
+        var count: usize = 0;
+        for (parsed) |searched_video| {
+            if (searched_video.comments) |comments| {
+                count += comments.len;
+            } else {
+                return FetchError.InvalidJsonResponse;
+            }
+        }
+        break :blk count;
+    };
+    var comments: std.ArrayListUnmanaged(datatypes.Comment) = try .initCapacity(arena.allocator(), comment_count);
+
+    const searched_videos = try arena.allocator().alloc(datatypes.SearchedVideo, parsed.len);
+    for (parsed, 0..) |searched_video, i| {
+        searched_videos[i] = searched_video.to(arena.allocator()) catch |err| return conversionToFetchError(err);
+        for (searched_video.comments.?) |comment| {
+            comments.appendAssumeCapacity(
+                comment.to(arena.allocator(), &searched_videos[i]) catch |err| return conversionToFetchError(err),
+            );
+        }
+    }
+
+    // No need to call `toOwnedSlice()` as `capacity == items.len`
+    return comments.items;
+}
+
+/// Create a pager that iterates over the results of `Api.searchComments`.
+/// `deinit` must be called on the returned pager to free the memory used by it.
+///
+/// - Use `Api.searchComments` to get the comments without a total.
+/// - Use `Api.searchCommentsWithTotal` to get the comments with a total.
+pub fn pageSearchComments(
+    self: *Self,
+    allocator: Allocator,
+    options: SearchCommentsOptions,
+    fetch_options: FetchOptions,
+) error{InvalidLimit}!Pager(datatypes.Comment, SearchCommentsOptions, searchCommentsAssumeLimit) {
+    if (options.limit <= 0 or options.limit > SearchCommentsOptions.max_limit) return error.InvalidLimit;
+    return Pager(datatypes.Comment, SearchCommentsOptions, searchCommentsAssumeLimit){
+        .allocator = allocator,
+        .api = self,
+        .options = options,
+        .fetch_options = fetch_options,
     };
 }

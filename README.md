@@ -1,6 +1,10 @@
 # zig-holodex
 
-An Idiomatic Zig library for the Holodex API with pretty formatting.
+Zig library for the [Holodex](https://holodex.net/) API, with pretty formatting.
+
+Note that as the [official documentation](https://docs.holodex.net/) is outdated,
+any documentation here about API endpoints, their parameters, and their responses
+are guesswork from querying the API. This library is not affiliated with Holodex.
 
 ## Supported Endpoints
 
@@ -12,7 +16,7 @@ An Idiomatic Zig library for the Holodex API with pretty formatting.
 - [x] GET /videos/{videoId}
 - [x] GET /channels
 - [ ] POST /search/videoSearch
-- [ ] POST /search/commentSearch
+- [x] POST /search/commentSearch
 
 ## Examples
 
