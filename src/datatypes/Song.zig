@@ -1,6 +1,7 @@
 //! Information about a song performance.
 
 const std = @import("std");
+const json = std.json;
 
 const holodex = @import("../root.zig");
 const datatypes = holodex.datatypes;
@@ -25,27 +26,29 @@ pub const format = holodex.defaultFormat(@This(), struct {});
 
 pub const ItunesId = enum(u64) { _ };
 
-/// The JSON representation of a `Song`.
-pub const Json = struct {
-    id: []const u8,
-    name: []const u8,
-    original_artist: []const u8,
-    start: datatypes.VideoOffset,
-    end: datatypes.VideoOffset,
-    art: []const u8,
-    itunesid: ItunesId,
+pub fn jsonParse(
+    allocator: std.mem.Allocator,
+    source: anytype,
+    options: json.ParseOptions,
+) json.ParseError(@TypeOf(source.*))!Self {
+    const Json = struct {
+        id: datatypes.Uuid,
+        name: []const u8,
+        original_artist: []const u8,
+        start: datatypes.VideoOffset,
+        end: datatypes.VideoOffset,
+        art: []const u8,
+        itunesid: ItunesId,
+    };
 
-    /// Convert to a `Song`. This function leaks memory when returning an error.
-    /// Use an arena allocator to free memory properly.
-    pub fn to(self: @This(), allocator: std.mem.Allocator) datatypes.JsonConversionError!Self {
-        return Self{
-            .holodex_id = try .parse(self.id),
-            .name = try holodex.deepCopy(allocator, self.name),
-            .original_artist = try holodex.deepCopy(allocator, self.original_artist),
-            .start = self.start,
-            .end = self.end,
-            .art = try holodex.deepCopy(allocator, self.art),
-            .itunes_id = self.itunesid,
-        };
-    }
-};
+    const parsed = try json.innerParse(Json, allocator, source, options);
+    return Self{
+        .holodex_id = parsed.id,
+        .name = parsed.name,
+        .original_artist = parsed.original_artist,
+        .start = parsed.start,
+        .end = parsed.end,
+        .art = parsed.art,
+        .itunes_id = parsed.itunesid,
+    };
+}

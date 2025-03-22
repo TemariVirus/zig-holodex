@@ -12,6 +12,7 @@ const Uri = std.Uri;
 const holodex = @import("root.zig");
 const datatypes = holodex.datatypes;
 const Pager = holodex.Pager;
+const SearchCommentsResponse = @import("parser/SearchedComments.zig");
 
 const package_version = @import("lib").version;
 const user_agent_string = std.fmt.comptimePrint(
@@ -373,16 +374,6 @@ fn httpToFetchError(err: HttpError) FetchError {
     }
 }
 
-fn conversionToFetchError(err: datatypes.JsonConversionError) FetchError {
-    return switch (err) {
-        datatypes.JsonConversionError.OutOfMemory => return FetchError.OutOfMemory,
-        datatypes.JsonConversionError.InvalidTimestamp,
-        datatypes.JsonConversionError.InvalidUuid,
-        datatypes.JsonConversionError.MissingField,
-        => return FetchError.InvalidJsonResponse,
-    };
-}
-
 /// Fetch currently upcoming or live streams. This corresponds to the `/live`
 /// endpoint. This is somewhat similar to calling `videos` but with default
 /// options, and `live_info` is always included.
@@ -420,8 +411,8 @@ pub fn channelInfo(
 ) FetchError!Response(datatypes.ChannelFull) {
     const path = try fmt.allocPrint(allocator, "/channels/{s}", .{id});
     defer allocator.free(path);
-    const parsed = try self.fetch(
-        datatypes.ChannelFull.Json,
+    return self.fetch(
+        datatypes.ChannelFull,
         allocator,
         .GET,
         path,
@@ -429,18 +420,6 @@ pub fn channelInfo(
         null,
         fetch_options,
     );
-    defer parsed.deinit();
-
-    var arena = try allocator.create(std.heap.ArenaAllocator);
-    arena.* = .init(allocator);
-    errdefer arena.deinit();
-
-    const result = parsed.value.to(arena.allocator()) catch |err| return conversionToFetchError(err);
-    return .{
-        .arena = arena,
-        .headers = parsed.headers,
-        .value = result,
-    };
 }
 
 /// Fetch currently upcoming or live streams for a set of channels. This
@@ -454,10 +433,8 @@ pub fn channelsLive(
     channel_ids: []const []const u8,
     fetch_options: FetchOptions,
 ) FetchError!Response([]datatypes.Video) {
-    // const Options = struct { channels: []const []const u8 };
-
-    const parsed = try self.fetch(
-        []datatypes.Video.Json,
+    return self.fetch(
+        []datatypes.Video,
         allocator,
         .GET,
         "/users/live",
@@ -465,21 +442,6 @@ pub fn channelsLive(
         null,
         fetch_options,
     );
-    defer parsed.deinit();
-
-    var arena = try allocator.create(std.heap.ArenaAllocator);
-    arena.* = .init(allocator);
-    errdefer arena.deinit();
-
-    const result = try arena.allocator().alloc(datatypes.Video, parsed.value.len);
-    for (parsed.value, 0..) |video, i| {
-        result[i] = video.to(arena.allocator()) catch |err| return conversionToFetchError(err);
-    }
-    return .{
-        .arena = arena,
-        .headers = parsed.headers,
-        .value = result,
-    };
 }
 
 /// Query options for `Api.videoInfo`.
@@ -514,8 +476,8 @@ pub fn videoInfo(
 ) FetchError!Response(datatypes.VideoFull) {
     const path = try fmt.allocPrint(allocator, "/videos/{s}", .{options.video_id});
     defer allocator.free(path);
-    const parsed = try self.fetch(
-        datatypes.VideoFull.Json,
+    return self.fetch(
+        datatypes.VideoFull,
         allocator,
         .GET,
         path,
@@ -523,18 +485,6 @@ pub fn videoInfo(
         null,
         fetch_options,
     );
-    defer parsed.deinit();
-
-    var arena = try allocator.create(std.heap.ArenaAllocator);
-    arena.* = .init(allocator);
-    errdefer arena.deinit();
-
-    const result = parsed.value.to(arena.allocator()) catch |err| return conversionToFetchError(err);
-    return .{
-        .arena = arena,
-        .headers = parsed.headers,
-        .value = result,
-    };
 }
 
 /// Query options for `Api.listChannels`.
@@ -577,8 +527,8 @@ fn listChannelsAssumeLimit(
     options: ListChannelsOptions,
     fetch_options: FetchOptions,
 ) FetchError!Response([]datatypes.Channel) {
-    const parsed = try self.fetch(
-        []datatypes.Channel.Json,
+    return self.fetch(
+        []datatypes.Channel,
         allocator,
         .GET,
         "/channels",
@@ -586,21 +536,6 @@ fn listChannelsAssumeLimit(
         null,
         fetch_options,
     );
-    defer parsed.deinit();
-
-    var arena = try allocator.create(std.heap.ArenaAllocator);
-    arena.* = .init(allocator);
-    errdefer arena.deinit();
-
-    const result = try arena.allocator().alloc(datatypes.Channel, parsed.value.len);
-    for (parsed.value, 0..) |channel, i| {
-        result[i] = channel.to(arena.allocator()) catch |err| return conversionToFetchError(err);
-    }
-    return .{
-        .arena = arena,
-        .headers = parsed.headers,
-        .value = result,
-    };
 }
 
 /// Create a pager that iterates over the results of `Api.listChannels`.
@@ -676,6 +611,29 @@ const SearchCommentsOptionsApi = struct {
     }
 };
 
+fn searchCommentsAssumeLimit(
+    self: *Self,
+    allocator: Allocator,
+    options: SearchCommentsOptions,
+    fetch_options: FetchOptions,
+) FetchError!Response([]datatypes.Comment) {
+    const parsed = try self.fetch(
+        SearchCommentsResponse,
+        allocator,
+        .POST,
+        "/search/commentSearch",
+        empty_query,
+        @as(?SearchCommentsOptionsApi, SearchCommentsOptionsApi.from(options, false)),
+        fetch_options,
+    );
+    errdefer parsed.deinit();
+    return .{
+        .arena = parsed.arena,
+        .headers = parsed.headers,
+        .value = parsed.value.comments,
+    };
+}
+
 /// Search for timestamp comments in streams matching the given options. This
 /// corresponds to the `/search/commentSearch` endpoint.
 ///
@@ -689,35 +647,6 @@ pub fn searchComments(
 ) (FetchError || error{InvalidLimit})!Response([]datatypes.Comment) {
     if (options.limit <= 0 or options.limit > SearchCommentsOptions.max_limit) return error.InvalidLimit;
     return self.searchCommentsAssumeLimit(allocator, options, fetch_options);
-}
-
-fn searchCommentsAssumeLimit(
-    self: *Self,
-    allocator: Allocator,
-    options: SearchCommentsOptions,
-    fetch_options: FetchOptions,
-) FetchError!Response([]datatypes.Comment) {
-    const parsed = try self.fetch(
-        []datatypes.SearchedVideo.Json,
-        allocator,
-        .POST,
-        "/search/commentSearch",
-        empty_query,
-        @as(?SearchCommentsOptionsApi, SearchCommentsOptionsApi.from(options, false)),
-        fetch_options,
-    );
-    defer parsed.deinit();
-
-    var arena = try allocator.create(std.heap.ArenaAllocator);
-    arena.* = .init(allocator);
-    errdefer arena.deinit();
-
-    const comments = try searchCommentsInner(arena, parsed.value);
-    return .{
-        .arena = arena,
-        .headers = parsed.headers,
-        .value = comments,
-    };
 }
 
 /// The same as `Api.searchComments`, but includes the total number of comments
@@ -734,7 +663,7 @@ pub fn searchCommentsWithTotal(
     if (options.limit <= 0 or options.limit > 100_000) return error.InvalidLimit;
 
     const parsed = try self.fetch(
-        WithTotal([]datatypes.SearchedVideo.Json),
+        WithTotal(SearchCommentsResponse),
         allocator,
         .POST,
         "/search/commentSearch",
@@ -742,53 +671,15 @@ pub fn searchCommentsWithTotal(
         @as(?SearchCommentsOptionsApi, SearchCommentsOptionsApi.from(options, true)),
         fetch_options,
     );
-    defer parsed.deinit();
-
-    var arena = try allocator.create(std.heap.ArenaAllocator);
-    arena.* = .init(allocator);
-    errdefer arena.deinit();
-
-    const comments = try searchCommentsInner(arena, parsed.value.items);
+    errdefer parsed.deinit();
     return .{
-        .arena = arena,
+        .arena = parsed.arena,
         .headers = parsed.headers,
         .value = .{
             .total = parsed.value.total,
-            .items = comments,
+            .items = parsed.value.items.comments,
         },
     };
-}
-
-/// Common code for `searchCommentsAssumeLimit` and `searchCommentsWithTotal`.
-fn searchCommentsInner(
-    arena: *std.heap.ArenaAllocator,
-    parsed: []datatypes.SearchedVideo.Json,
-) FetchError![]datatypes.Comment {
-    const comment_count = blk: {
-        var count: usize = 0;
-        for (parsed) |searched_video| {
-            if (searched_video.comments) |comments| {
-                count += comments.len;
-            } else {
-                return FetchError.InvalidJsonResponse;
-            }
-        }
-        break :blk count;
-    };
-    var comments: std.ArrayListUnmanaged(datatypes.Comment) = try .initCapacity(arena.allocator(), comment_count);
-
-    const searched_videos = try arena.allocator().alloc(datatypes.SearchedVideo, parsed.len);
-    for (parsed, 0..) |searched_video, i| {
-        searched_videos[i] = searched_video.to(arena.allocator()) catch |err| return conversionToFetchError(err);
-        for (searched_video.comments.?) |comment| {
-            comments.appendAssumeCapacity(
-                comment.to(arena.allocator(), &searched_videos[i]) catch |err| return conversionToFetchError(err),
-            );
-        }
-    }
-
-    // No need to call `toOwnedSlice()` as `capacity == items.len`
-    return comments.items;
 }
 
 /// Create a pager that iterates over the results of `Api.searchComments`.

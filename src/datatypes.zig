@@ -1,7 +1,6 @@
 const std = @import("std");
 const zeit = @import("zeit");
 
-// TODO: implement jsonParse directly instead of parsing and copying
 pub const Channel = @import("datatypes/Channel.zig");
 pub const ChannelFull = @import("datatypes/ChannelFull.zig");
 pub const Comment = @import("datatypes/Comment.zig");
@@ -12,12 +11,6 @@ pub const Video = @import("datatypes/Video.zig");
 pub const VideoFull = @import("datatypes/VideoFull.zig");
 pub const VideoMin = @import("datatypes/VideoMin.zig");
 pub const Vtuber = @import("datatypes/Vtuber.zig");
-
-/// Errors that can occur when converting a JSON type to its corresponding type.
-pub const JsonConversionError = Timestamp.ParseError ||
-    Uuid.ParseError ||
-    std.mem.Allocator.Error ||
-    error{MissingField};
 
 /// A language code.
 pub const Language = []const u8;
@@ -139,6 +132,29 @@ pub const Timestamp = enum(i64) {
             .source = .{ .iso8601 = iso8601 },
         }) catch return ParseError.InvalidTimestamp;
         return fromInstant(instant);
+    }
+
+    pub fn jsonParse(
+        allocator: std.mem.Allocator,
+        source: anytype,
+        _: std.json.ParseOptions,
+    ) std.json.ParseError(@TypeOf(source.*))!Timestamp {
+        // Worst case: "-XXXXXXXXXXXX-XX-XXTXX:XX:XXZ"
+        var buf: [29]u8 = undefined;
+        var list: std.ArrayList(u8) = .{
+            .items = buf[0..0],
+            .capacity = buf.len,
+            .allocator = allocator,
+        };
+
+        const str = try source.allocNextIntoArrayListMax(
+            &list,
+            .alloc_if_needed,
+            buf.len,
+        ) orelse list.items;
+        return parseISO(str) catch |err| switch (err) {
+            ParseError.InvalidTimestamp => return error.InvalidEnumTag,
+        };
     }
 
     pub fn format(self: Timestamp, comptime _: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {

@@ -1,6 +1,7 @@
 //! Basic information about a video.
 
 const std = @import("std");
+const json = std.json;
 
 const holodex = @import("../root.zig");
 const datatypes = holodex.datatypes;
@@ -48,76 +49,78 @@ pub const Channel = struct {
 
     pub const format = holodex.defaultFormat(@This(), struct {});
 
-    /// The JSON representation of a `Video.Channel`.
-    pub const Json = struct {
-        id: []const u8,
-        name: []const u8,
-        english_name: ?[]const u8 = null,
-        type: datatypes.ChannelFull.Type,
-        org: ?[]const u8 = null,
-        suborg: ?[]const u8 = null,
-        photo: []const u8,
+    pub fn jsonParse(
+        allocator: std.mem.Allocator,
+        source: anytype,
+        options: json.ParseOptions,
+    ) json.ParseError(@TypeOf(source.*))!Channel {
+        const Json = struct {
+            id: []const u8,
+            name: []const u8,
+            english_name: ?[]const u8 = null,
+            type: datatypes.ChannelFull.Type,
+            org: ?[]const u8 = null,
+            suborg: ?[]const u8 = null,
+            photo: []const u8,
+        };
 
-        /// Convert to a `Video.Channel`. This function leaks memory when returning an error.
-        /// Use an arena allocator to free memory properly.
-        pub fn to(self: @This(), allocator: std.mem.Allocator) datatypes.JsonConversionError!Channel {
-            const group = if (self.suborg) |suborg|
-                if (suborg.len <= 2)
-                    null
-                else
-                    // Remove the 2 random letters preceding the group name.
-                    try holodex.deepCopy(allocator, suborg[2..])
+        const parsed = try json.innerParse(Json, allocator, source, options);
+        const group = if (parsed.suborg) |suborg|
+            if (suborg.len <= 2)
+                null
             else
-                null;
-
-            return .{
-                .id = try holodex.deepCopy(allocator, self.id),
-                .name = try holodex.deepCopy(allocator, self.name),
-                .english_name = try holodex.deepCopy(allocator, self.english_name),
-                .type = self.type,
-                .org = try holodex.deepCopy(allocator, self.org),
-                .group = group,
-                .photo = try holodex.deepCopy(allocator, self.photo),
-            };
-        }
-    };
-};
-
-/// The JSON representation of a `Video`.
-pub const Json = struct {
-    id: []const u8,
-    title: []const u8,
-    type: datatypes.VideoFull.Type,
-    topic_id: ?[]const u8 = null,
-    published_at: ?[]const u8 = null,
-    available_at: []const u8,
-    duration: datatypes.Duration = datatypes.Duration.fromSeconds(0),
-    status: datatypes.VideoFull.Status,
-    start_scheduled: ?[]const u8 = null,
-    start_actual: ?[]const u8 = null,
-    end_actual: ?[]const u8 = null,
-    live_viewers: u64,
-    channel: Channel.Json,
-
-    /// Convert to a `Video`. This function leaks memory when returning an error.
-    /// Use an arena allocator to free memory properly.
-    pub fn to(self: @This(), allocator: std.mem.Allocator) datatypes.JsonConversionError!Self {
-        return .{
-            .id = try holodex.deepCopy(allocator, self.id),
-            .title = try holodex.deepCopy(allocator, self.title),
-            .type = self.type,
-            .topic = try holodex.deepCopy(allocator, self.topic_id),
-            .published_at = try holodex.parseOptionalTimestamp(self.published_at),
-            .available_at = try datatypes.Timestamp.parseISO(self.available_at),
-            .duration = self.duration,
-            .status = self.status,
-            .live_info = .{
-                .start_scheduled = try holodex.parseOptionalTimestamp(self.start_scheduled),
-                .start_actual = try holodex.parseOptionalTimestamp(self.start_actual),
-                .end_actual = try holodex.parseOptionalTimestamp(self.end_actual),
-                .live_viewers = self.live_viewers,
-            },
-            .channel = try self.channel.to(allocator),
+                // Remove the 2 random letters preceding the group name.
+                suborg[2..]
+        else
+            null;
+        return Channel{
+            .id = parsed.id,
+            .name = parsed.name,
+            .english_name = parsed.english_name,
+            .type = parsed.type,
+            .org = parsed.org,
+            .group = group,
+            .photo = parsed.photo,
         };
     }
 };
+
+pub fn jsonParse(
+    allocator: std.mem.Allocator,
+    source: anytype,
+    options: json.ParseOptions,
+) json.ParseError(@TypeOf(source.*))!Self {
+    const Json = struct {
+        id: []const u8,
+        title: []const u8,
+        type: datatypes.VideoFull.Type,
+        topic_id: ?[]const u8 = null,
+        published_at: ?datatypes.Timestamp = null,
+        available_at: datatypes.Timestamp,
+        duration: datatypes.Duration = datatypes.Duration.fromSeconds(0),
+        status: datatypes.VideoFull.Status,
+        start_scheduled: ?datatypes.Timestamp = null,
+        start_actual: ?datatypes.Timestamp = null,
+        end_actual: ?datatypes.Timestamp = null,
+        live_viewers: u64,
+        channel: Channel,
+    };
+    const parsed = try json.innerParse(Json, allocator, source, options);
+    return Self{
+        .id = parsed.id,
+        .title = parsed.title,
+        .type = parsed.type,
+        .topic = parsed.topic_id,
+        .published_at = parsed.published_at,
+        .available_at = parsed.available_at,
+        .duration = parsed.duration,
+        .status = parsed.status,
+        .live_info = .{
+            .start_scheduled = parsed.start_scheduled,
+            .start_actual = parsed.start_actual,
+            .end_actual = parsed.end_actual,
+            .live_viewers = parsed.live_viewers,
+        },
+        .channel = parsed.channel,
+    };
+}

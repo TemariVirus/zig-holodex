@@ -1,6 +1,7 @@
 //! Full information about a video.
 
 const std = @import("std");
+const json = std.json;
 
 const holodex = @import("../root.zig");
 const datatypes = holodex.datatypes;
@@ -139,54 +140,54 @@ pub const Channel = struct {
         clip_count: u32,
     };
 
-    /// The JSON representation of a `VideoFull.Channel`.
-    pub const Json = struct {
-        id: []const u8,
-        name: []const u8,
-        english_name: ?[]const u8 = null,
-        type: datatypes.ChannelFull.Type,
-        org: ?[]const u8 = null,
-        suborg: ?[]const u8 = null,
-        photo: []const u8,
+    pub fn jsonParse(
+        allocator: std.mem.Allocator,
+        source: anytype,
+        options: json.ParseOptions,
+    ) json.ParseError(@TypeOf(source.*))!Channel {
+        const Json = struct {
+            id: []const u8,
+            name: []const u8,
+            english_name: ?datatypes.EnglishName = null,
+            type: datatypes.ChannelFull.Type,
+            org: ?datatypes.Organization = null,
+            suborg: ?datatypes.Group = null,
+            photo: []const u8,
+            video_count: ?u32 = null,
+            subscriber_count: ?u64 = null,
+            view_count: ?u64 = null,
+            clip_count: ?u32 = null,
+        };
 
-        // Only returned when 'includes' contains 'channel_stats'
-        video_count: ?u32 = null,
-        subscriber_count: ?u64 = null,
-        view_count: ?u64 = null,
-        clip_count: ?u32 = null,
-
-        /// Convert to a `VideoFull.Channel`. This function leaks memory when returning an error.
-        /// Use an arena allocator to free memory properly.
-        pub fn to(self: @This(), allocator: std.mem.Allocator) datatypes.JsonConversionError!Channel {
-            const group = if (self.suborg) |suborg|
-                if (suborg.len <= 2)
-                    null
-                else
-                    // Remove the 2 random letters preceding the group name.
-                    try holodex.deepCopy(allocator, suborg[2..])
+        const parsed = try json.innerParse(Json, allocator, source, options);
+        const group = if (parsed.suborg) |suborg|
+            if (suborg.len <= 2)
+                null
             else
-                null;
+                // Remove the 2 random letters preceding the group name
+                suborg[2..]
+        else
+            null;
 
-            // Use non-nullable `video_count` field to check if `stats` should be `null`
-            const stats = if (self.video_count) |_| Stats{
-                .video_count = self.video_count.?,
-                .subscriber_count = self.subscriber_count orelse return datatypes.JsonConversionError.MissingField,
-                .view_count = self.view_count orelse return datatypes.JsonConversionError.MissingField,
-                .clip_count = self.clip_count orelse 0,
-            } else null;
+        // Use non-nullable `video_count` field to check if `stats` should be `null`
+        const stats = if (parsed.video_count) |_| Stats{
+            .video_count = parsed.video_count.?,
+            .subscriber_count = parsed.subscriber_count orelse return error.MissingField,
+            .view_count = parsed.view_count orelse return error.MissingField,
+            .clip_count = parsed.clip_count orelse 0,
+        } else null;
 
-            return .{
-                .id = try holodex.deepCopy(allocator, self.id),
-                .name = try holodex.deepCopy(allocator, self.name),
-                .english_name = try holodex.deepCopy(allocator, self.english_name),
-                .type = self.type,
-                .org = try holodex.deepCopy(allocator, self.org),
-                .group = group,
-                .photo = try holodex.deepCopy(allocator, self.photo),
-                .stats = stats,
-            };
-        }
-    };
+        return .{
+            .id = parsed.id,
+            .name = parsed.name,
+            .english_name = parsed.english_name,
+            .type = parsed.type,
+            .org = parsed.org,
+            .group = group,
+            .photo = parsed.photo,
+            .stats = stats,
+        };
+    }
 };
 
 /// A comment with a timestamp(s) on a video.
@@ -200,125 +201,96 @@ pub const TimestampComment = struct {
     const Self = @This();
     pub const format = holodex.defaultFormat(@This(), struct {});
 
-    /// The JSON representation of a `TimestampComment`.
-    pub const Json = struct {
-        comment_key: []const u8,
-        message: []const u8,
-
-        /// Convert to a `Comment`. This function leaks memory when returning an error.
-        /// Use an arena allocator to free memory properly.
-        pub fn to(self: @This(), allocator: std.mem.Allocator) datatypes.JsonConversionError!TimestampComment {
-            return .{
-                .id = try holodex.deepCopy(allocator, self.comment_key),
-                .content = try holodex.deepCopy(allocator, self.message),
-            };
-        }
-    };
-};
-
-/// The JSON representation of a `VideoFull`.
-pub const Json = struct {
-    id: []const u8,
-    title: []const u8,
-    type: Type,
-    topic_id: ?[]const u8 = null,
-    published_at: ?[]const u8 = null,
-    available_at: []const u8,
-    duration: datatypes.Duration = datatypes.Duration.fromSeconds(0),
-    status: Status,
-    lang: ?[]const u8 = null,
-    live_tl_count: ?std.json.ArrayHashMap(u32) = null,
-    // Only returned when 'includes' contains 'description'
-    description: ?[]const u8 = null,
-    // Ignore `songscount`
-    // Only returned when 'includes' contains 'songs'
-    songs: ?[]const datatypes.Song.Json = null,
-    channel: Channel.Json,
-
-    // Only returned when 'includes' contains 'live_info'
-    start_scheduled: ?[]const u8 = null,
-    start_actual: ?[]const u8 = null,
-    end_actual: ?[]const u8 = null,
-    live_viewers: ?u64 = null,
-
-    // Only returned when 'includes' contains 'clips'
-    clips: ?[]const VideoMin.Json = null,
-    // Only returned when 'includes' contains 'sources'
-    sources: ?[]const VideoMin.Json = null,
-    // Only returned when 'includes' contains 'refers'
-    refers: ?[]const VideoMin.Json = null,
-    // Only returned when 'includes' contains 'simulcasts'
-    simulcasts: ?[]const VideoMin.Json = null,
-    // Only returned when 'includes' contains 'mentions'
-    mentions: ?[]const datatypes.Vtuber.Json = null,
-    // Only returned when c === '1', comments with timestamps only
-    comments: ?[]const TimestampComment.Json = null,
-
-    fn toOptionalArray(
-        Child: type,
+    pub fn jsonParse(
         allocator: std.mem.Allocator,
-        array: ?[]const Child.Json,
-    ) datatypes.JsonConversionError!?[]Child {
-        if (array) |arr| {
-            const converted = try allocator.alloc(Child, arr.len);
-            for (0..arr.len) |i| {
-                converted[i] = try arr[i].to(allocator);
-            }
-            return converted;
-        } else {
-            return null;
-        }
-    }
-
-    /// Convert to a `VideoFull`. This function leaks memory when returning an error.
-    /// Use an arena allocator to free memory properly.
-    pub fn to(self: @This(), allocator: std.mem.Allocator) datatypes.JsonConversionError!Self {
-        const live_tl_count = if (self.live_tl_count) |map| blk: {
-            var copy: std.StringArrayHashMapUnmanaged(u32) = .empty;
-            try copy.ensureTotalCapacity(allocator, map.map.count());
-            var iter = map.map.iterator();
-            while (iter.next()) |entry| {
-                copy.entries.appendAssumeCapacity(.{
-                    .key = try allocator.dupe(u8, entry.key_ptr.*),
-                    .value = entry.value_ptr.*,
-                    // Re-indexing will compute this hash later
-                    .hash = undefined,
-                });
-            }
-            try copy.reIndex(allocator);
-            break :blk copy;
-        } else null;
-
-        // Use non-nullable `live_viewers` field to check if `live_info` should be `null`.
-        const live_info = if (self.live_viewers) |live_viewers| LiveInfo{
-            .start_scheduled = try holodex.parseOptionalTimestamp(self.start_scheduled),
-            .start_actual = try holodex.parseOptionalTimestamp(self.start_actual),
-            .end_actual = try holodex.parseOptionalTimestamp(self.end_actual),
-            .live_viewers = live_viewers,
-        } else null;
-
+        source: anytype,
+        options: json.ParseOptions,
+    ) json.ParseError(@TypeOf(source.*))!TimestampComment {
+        const Json = struct {
+            comment_key: []const u8,
+            message: []const u8,
+        };
+        const parsed = try json.innerParse(Json, allocator, source, options);
         return .{
-            .id = try holodex.deepCopy(allocator, self.id),
-            .title = try holodex.deepCopy(allocator, self.title),
-            .type = self.type,
-            .topic = try holodex.deepCopy(allocator, self.topic_id),
-            .published_at = try holodex.parseOptionalTimestamp(self.published_at),
-            .available_at = try datatypes.Timestamp.parseISO(self.available_at),
-            .duration = self.duration,
-            .status = self.status,
-            .lang = try holodex.deepCopy(allocator, self.lang),
-            .live_tl_count = live_tl_count,
-            .description = try holodex.deepCopy(allocator, self.description),
-            .songs = try toOptionalArray(datatypes.Song, allocator, self.songs),
-            .channel = try self.channel.to(allocator),
-
-            .live_info = live_info,
-            .clips = try toOptionalArray(VideoMin, allocator, self.clips),
-            .sources = try toOptionalArray(VideoMin, allocator, self.sources),
-            .refers = try toOptionalArray(VideoMin, allocator, self.refers),
-            .simulcasts = try toOptionalArray(VideoMin, allocator, self.simulcasts),
-            .mentions = try toOptionalArray(datatypes.Vtuber, allocator, self.mentions),
-            .timestamp_comments = try toOptionalArray(TimestampComment, allocator, self.comments),
+            .id = parsed.comment_key,
+            .content = parsed.message,
         };
     }
 };
+
+pub fn jsonParse(
+    allocator: std.mem.Allocator,
+    source: anytype,
+    options: json.ParseOptions,
+) json.ParseError(@TypeOf(source.*))!Self {
+    const Json = struct {
+        id: []const u8,
+        title: []const u8,
+        type: Type,
+        topic_id: ?datatypes.Topic = null,
+        published_at: ?datatypes.Timestamp = null,
+        available_at: datatypes.Timestamp,
+        duration: datatypes.Duration = datatypes.Duration.fromSeconds(0),
+        status: Status,
+        lang: ?datatypes.Language = null,
+        live_tl_count: ?std.json.ArrayHashMap(u32) = null,
+        // Only returned when 'includes' contains 'description'
+        description: ?[]const u8 = null,
+        // Ignore `songscount`
+        // Only returned when 'includes' contains 'songs'
+        songs: ?[]const datatypes.Song = null,
+        channel: Channel,
+
+        // Only returned when 'includes' contains 'live_info'
+        start_scheduled: ?datatypes.Timestamp = null,
+        start_actual: ?datatypes.Timestamp = null,
+        end_actual: ?datatypes.Timestamp = null,
+        live_viewers: ?u64 = null,
+
+        // Only returned when 'includes' contains 'clips'
+        clips: ?[]const VideoMin = null,
+        // Only returned when 'includes' contains 'sources'
+        sources: ?[]const VideoMin = null,
+        // Only returned when 'includes' contains 'refers'
+        refers: ?[]const VideoMin = null,
+        // Only returned when 'includes' contains 'simulcasts'
+        simulcasts: ?[]const VideoMin = null,
+        // Only returned when 'includes' contains 'mentions'
+        mentions: ?[]const datatypes.Vtuber = null,
+        // Only returned when c === '1', comments with timestamps only
+        comments: ?[]const TimestampComment = null,
+    };
+
+    const parsed = try json.innerParse(Json, allocator, source, options);
+
+    // Use non-nullable `live_viewers` field to check if `live_info` should be `null`.
+    const live_info = if (parsed.live_viewers) |live_viewers| LiveInfo{
+        .start_scheduled = parsed.start_scheduled,
+        .start_actual = parsed.start_actual,
+        .end_actual = parsed.end_actual,
+        .live_viewers = live_viewers,
+    } else null;
+
+    return .{
+        .id = parsed.id,
+        .title = parsed.title,
+        .type = parsed.type,
+        .topic = parsed.topic_id,
+        .published_at = parsed.published_at,
+        .available_at = parsed.available_at,
+        .duration = parsed.duration,
+        .status = parsed.status,
+        .lang = parsed.lang,
+        .live_tl_count = if (parsed.live_tl_count) |map| map.map else null,
+        .description = parsed.description,
+        .songs = parsed.songs,
+        .live_info = live_info,
+        .channel = parsed.channel,
+        .clips = parsed.clips,
+        .sources = parsed.sources,
+        .refers = parsed.refers,
+        .simulcasts = parsed.simulcasts,
+        .mentions = parsed.mentions,
+        .timestamp_comments = parsed.comments,
+    };
+}

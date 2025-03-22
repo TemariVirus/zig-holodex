@@ -87,6 +87,25 @@ pub fn parse(string: []const u8) ParseError!@This() {
     return .{ .bytes = bytes };
 }
 
+pub fn jsonParse(
+    allocator: std.mem.Allocator,
+    source: anytype,
+    _: std.json.ParseOptions,
+) std.json.ParseError(@TypeOf(source.*))!@This() {
+    var buf: [36]u8 = undefined;
+    var list: std.ArrayList(u8) = .{
+        .items = buf[0..0],
+        .capacity = buf.len,
+        .allocator = allocator,
+    };
+    const str = try source.allocNextIntoArrayListMax(
+        &list,
+        .alloc_if_needed,
+        buf.len,
+    ) orelse list.items;
+    return parse(str) catch return error.UnexpectedToken;
+}
+
 pub fn format(
     value: @This(),
     comptime _: []const u8,
