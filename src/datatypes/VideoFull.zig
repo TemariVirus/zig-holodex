@@ -125,20 +125,9 @@ pub const Channel = struct {
     /// URL to the channel's profile picture.
     photo: []const u8,
     /// Channel statistics.
-    stats: ?Stats,
+    stats: ?datatypes.ChannelFull.Stats,
 
     pub const format = holodex.defaultFormat(@This(), struct {});
-
-    pub const Stats = struct {
-        /// Number of videos the channel has uploaded.
-        video_count: u32,
-        /// Number of subscribers the channel has.
-        subscriber_count: u64,
-        /// Number of views the channel has.
-        view_count: u64,
-        /// Number of clips of the channel. `0` if the channel is a subber.
-        clip_count: u32,
-    };
 
     pub fn jsonParse(
         allocator: std.mem.Allocator,
@@ -170,7 +159,7 @@ pub const Channel = struct {
             null;
 
         // Use non-nullable `video_count` field to check if `stats` should be `null`
-        const stats = if (parsed.video_count) |_| Stats{
+        const stats = if (parsed.video_count) |_| datatypes.ChannelFull.Stats{
             .video_count = parsed.video_count.?,
             .subscriber_count = parsed.subscriber_count orelse return error.MissingField,
             .view_count = parsed.view_count orelse return error.MissingField,
