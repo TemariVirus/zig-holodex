@@ -87,8 +87,8 @@ fn format(
     options: std.fmt.FormatOptions,
     pretty_formatter: anytype,
     comptime Overwrites: type,
-    max_depth: usize,
-    is_root: bool,
+    comptime max_depth: usize,
+    comptime is_root: bool,
 ) @TypeOf(pretty_formatter.writer).Error!void {
     const T = @TypeOf(value);
     const writer = pretty_formatter.writer;
