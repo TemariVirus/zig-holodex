@@ -456,7 +456,7 @@ const VideoInfoOptionsApi = struct {
     /// Corresponds to the `comments` field.
     c: enum { @"0", @"1" },
 
-    pub fn from(options: VideoInfoOptions) VideoInfoOptionsApi {
+    pub fn fromLib(options: VideoInfoOptions) VideoInfoOptionsApi {
         return VideoInfoOptionsApi{
             .c = switch (options.comments) {
                 false => .@"0",
@@ -481,7 +481,7 @@ pub fn videoInfo(
         allocator,
         .GET,
         path,
-        VideoInfoOptionsApi.from(options),
+        VideoInfoOptionsApi.fromLib(options),
         null,
         fetch_options,
     );
@@ -597,7 +597,7 @@ const SearchCommentsOptionsApi = struct {
     limit: usize,
     paginated: bool,
 
-    pub fn from(options: SearchCommentsOptions, paginated: bool) SearchCommentsOptionsApi {
+    pub fn fromLib(options: SearchCommentsOptions, paginated: bool) SearchCommentsOptionsApi {
         return SearchCommentsOptionsApi{
             .sort = options.sort,
             .comment = .{options.comment},
@@ -623,7 +623,7 @@ fn searchCommentsAssumeLimit(
         .POST,
         "/search/commentSearch",
         empty_query,
-        @as(?SearchCommentsOptionsApi, SearchCommentsOptionsApi.from(options, false)),
+        @as(?SearchCommentsOptionsApi, SearchCommentsOptionsApi.fromLib(options, false)),
         fetch_options,
     );
     errdefer parsed.deinit();
@@ -668,7 +668,7 @@ pub fn searchCommentsWithTotal(
         .POST,
         "/search/commentSearch",
         empty_query,
-        @as(?SearchCommentsOptionsApi, SearchCommentsOptionsApi.from(options, true)),
+        @as(?SearchCommentsOptionsApi, SearchCommentsOptionsApi.fromLib(options, true)),
         fetch_options,
     );
     errdefer parsed.deinit();
