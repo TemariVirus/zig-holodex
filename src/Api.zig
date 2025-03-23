@@ -664,7 +664,7 @@ pub const ListChannelsOptions = struct {
     /// Filter by any of the included languages. Leave null to query all.
     lang: ?[]const datatypes.Language = null,
     /// Column to sort on.
-    sort: meta.FieldEnum(datatypes.Channel) = .org,
+    sort: meta.FieldEnum(datatypes.Channel.Json) = .org,
     /// Sort order.
     order: SortOrder = .asc,
 

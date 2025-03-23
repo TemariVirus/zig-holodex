@@ -43,27 +43,29 @@ pub const Stats = struct {
     clip_count: u32,
 };
 
+/// The JSON schema for a `Channel`.
+pub const Json = struct {
+    id: []const u8,
+    name: []const u8,
+    english_name: ?datatypes.EnglishName = null,
+    type: datatypes.ChannelFull.Type,
+    org: ?datatypes.Organization = null,
+    group: ?datatypes.Group = null,
+    photo: ?[]const u8 = null,
+    twitter: ?[]const u8 = null,
+    twitch: ?[]const u8 = null,
+    video_count: u32,
+    subscriber_count: u64,
+    clip_count: ?u32 = null,
+    inactive: bool,
+    top_topics: ?[]const datatypes.Topic = null,
+};
+
 pub fn jsonParse(
     allocator: std.mem.Allocator,
     source: anytype,
     options: json.ParseOptions,
 ) json.ParseError(@TypeOf(source.*))!Self {
-    const Json = struct {
-        id: []const u8,
-        name: []const u8,
-        english_name: ?datatypes.EnglishName = null,
-        type: datatypes.ChannelFull.Type,
-        org: ?datatypes.Organization = null,
-        group: ?datatypes.Group = null,
-        photo: ?[]const u8 = null,
-        twitter: ?[]const u8 = null,
-        twitch: ?[]const u8 = null,
-        video_count: u32,
-        subscriber_count: u64,
-        clip_count: ?u32 = null,
-        inactive: bool,
-        top_topics: ?[]const datatypes.Topic = null,
-    };
     const parsed = try json.innerParse(Json, allocator, source, options);
     return .{
         .id = parsed.id,

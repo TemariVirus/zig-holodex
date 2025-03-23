@@ -58,6 +58,8 @@ pub const format = holodex.defaultFormat(@This(), struct {});
 pub const Type = enum {
     subber,
     vtuber,
+    external,
+    system,
 };
 
 /// Stats of a channel.
