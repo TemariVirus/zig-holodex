@@ -85,6 +85,7 @@ pub const Type = enum {
     clip,
     /// Placeholder with no corresponding video on YouTube.
     placeholder,
+    @"legacy-placeholder",
 };
 
 /// Status of a video.
@@ -134,7 +135,7 @@ pub const Channel = struct {
         source: anytype,
         options: json.ParseOptions,
     ) json.ParseError(@TypeOf(source.*))!Channel {
-        const Json = struct {
+        const parsed = try json.innerParse(struct {
             id: []const u8,
             name: []const u8,
             english_name: ?datatypes.EnglishName = null,
@@ -146,9 +147,8 @@ pub const Channel = struct {
             subscriber_count: ?u64 = null,
             view_count: ?u64 = null,
             clip_count: ?u32 = null,
-        };
+        }, allocator, source, options);
 
-        const parsed = try json.innerParse(Json, allocator, source, options);
         const group = if (parsed.suborg) |suborg|
             if (suborg.len <= 2)
                 null
@@ -195,11 +195,10 @@ pub const TimestampComment = struct {
         source: anytype,
         options: json.ParseOptions,
     ) json.ParseError(@TypeOf(source.*))!TimestampComment {
-        const Json = struct {
+        const parsed = try json.innerParse(struct {
             comment_key: []const u8,
             message: []const u8,
-        };
-        const parsed = try json.innerParse(Json, allocator, source, options);
+        }, allocator, source, options);
         return .{
             .id = parsed.comment_key,
             .content = parsed.message,
@@ -207,49 +206,50 @@ pub const TimestampComment = struct {
     }
 };
 
+/// The JSON schema for a `VideoFull`.
+pub const Json = struct {
+    id: []const u8,
+    title: []const u8,
+    type: Type,
+    topic_id: ?datatypes.Topic = null,
+    published_at: ?datatypes.Timestamp = null,
+    available_at: datatypes.Timestamp,
+    duration: datatypes.Duration = datatypes.Duration.fromSeconds(0),
+    status: Status,
+    lang: ?datatypes.Language = null,
+    live_tl_count: ?std.json.ArrayHashMap(u32) = null,
+    // Only returned when 'includes' contains 'description'
+    description: ?[]const u8 = null,
+    songscount: ?u32 = null,
+    // Only returned when 'includes' contains 'songs'
+    songs: ?[]const datatypes.Song = null,
+    channel: Channel,
+
+    // Only returned when 'includes' contains 'live_info'
+    start_scheduled: ?datatypes.Timestamp = null,
+    start_actual: ?datatypes.Timestamp = null,
+    end_actual: ?datatypes.Timestamp = null,
+    live_viewers: ?u64 = null,
+
+    // Only returned when 'includes' contains 'clips'
+    clips: ?[]const VideoMin = null,
+    // Only returned when 'includes' contains 'sources'
+    sources: ?[]const VideoMin = null,
+    // Only returned when 'includes' contains 'refers'
+    refers: ?[]const VideoMin = null,
+    // Only returned when 'includes' contains 'simulcasts'
+    simulcasts: ?[]const VideoMin = null,
+    // Only returned when 'includes' contains 'mentions'
+    mentions: ?[]const datatypes.Vtuber = null,
+    // Only returned when c === '1', comments with timestamps only
+    comments: ?[]const TimestampComment = null,
+};
+
 pub fn jsonParse(
     allocator: std.mem.Allocator,
     source: anytype,
     options: json.ParseOptions,
 ) json.ParseError(@TypeOf(source.*))!Self {
-    const Json = struct {
-        id: []const u8,
-        title: []const u8,
-        type: Type,
-        topic_id: ?datatypes.Topic = null,
-        published_at: ?datatypes.Timestamp = null,
-        available_at: datatypes.Timestamp,
-        duration: datatypes.Duration = datatypes.Duration.fromSeconds(0),
-        status: Status,
-        lang: ?datatypes.Language = null,
-        live_tl_count: ?std.json.ArrayHashMap(u32) = null,
-        // Only returned when 'includes' contains 'description'
-        description: ?[]const u8 = null,
-        // Ignore `songscount`
-        // Only returned when 'includes' contains 'songs'
-        songs: ?[]const datatypes.Song = null,
-        channel: Channel,
-
-        // Only returned when 'includes' contains 'live_info'
-        start_scheduled: ?datatypes.Timestamp = null,
-        start_actual: ?datatypes.Timestamp = null,
-        end_actual: ?datatypes.Timestamp = null,
-        live_viewers: ?u64 = null,
-
-        // Only returned when 'includes' contains 'clips'
-        clips: ?[]const VideoMin = null,
-        // Only returned when 'includes' contains 'sources'
-        sources: ?[]const VideoMin = null,
-        // Only returned when 'includes' contains 'refers'
-        refers: ?[]const VideoMin = null,
-        // Only returned when 'includes' contains 'simulcasts'
-        simulcasts: ?[]const VideoMin = null,
-        // Only returned when 'includes' contains 'mentions'
-        mentions: ?[]const datatypes.Vtuber = null,
-        // Only returned when c === '1', comments with timestamps only
-        comments: ?[]const TimestampComment = null,
-    };
-
     const parsed = try json.innerParse(Json, allocator, source, options);
 
     // Use non-nullable `live_viewers` field to check if `live_info` should be `null`.

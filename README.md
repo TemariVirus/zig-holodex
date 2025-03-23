@@ -9,7 +9,7 @@ are guesswork from querying the API. This library is not affiliated with Holodex
 ## Supported Endpoints
 
 - [ ] GET /live
-- [ ] GET /videos
+- [x] GET /videos
 - [x] GET /channels/{channelId}
 - [ ] GET /channels/{channelId}/{type}
 - [x] GET /users/live

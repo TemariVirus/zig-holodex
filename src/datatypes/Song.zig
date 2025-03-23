@@ -17,9 +17,9 @@ start: datatypes.VideoOffset,
 /// End time of the song performance in the video.
 end: datatypes.VideoOffset,
 /// URL to the song's cover art.
-art: []const u8,
+art: ?[]const u8,
 /// iTunes ID of the song.
-itunes_id: ItunesId,
+itunes_id: ?ItunesId,
 
 const Self = @This();
 pub const format = holodex.defaultFormat(@This(), struct {});
@@ -37,8 +37,8 @@ pub fn jsonParse(
         original_artist: []const u8,
         start: datatypes.VideoOffset,
         end: datatypes.VideoOffset,
-        art: []const u8,
-        itunesid: ItunesId,
+        art: ?[]const u8 = null,
+        itunesid: ?ItunesId = null,
     };
 
     const parsed = try json.innerParse(Json, allocator, source, options);

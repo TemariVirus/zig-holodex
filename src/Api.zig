@@ -84,6 +84,8 @@ pub const ResponseHeaders = struct {
     // When `rate_limit_remaining` will reset to `rate_limit`.
     rate_limit_reset: datatypes.Timestamp,
 
+    pub const format = holodex.defaultFormat(@This(), struct {});
+
     pub const ParseError = fmt.ParseIntError || error{
         DuplicateHeader,
         InvalidHeader,
@@ -144,6 +146,8 @@ pub fn Response(comptime T: type) type {
         headers: ResponseHeaders,
         value: T,
 
+        pub const format = holodex.defaultFormat(@This(), struct {});
+
         pub fn deinit(self: @This()) void {
             const allocator = self.arena.child_allocator;
             self.arena.deinit();
@@ -192,15 +196,9 @@ pub fn init(allocator: Allocator, options: InitOptions) InitError!Self {
 }
 
 fn removeTrailingSlash(uri: Uri) Uri {
-    const path = uri.path.percent_encoded;
-    if (path.len == 0) return uri;
-
-    if (path[path.len - 1] == '/') {
-        var new_uri = uri;
-        new_uri.path.percent_encoded = path[0 .. path.len - 1];
-        return new_uri;
-    }
-    return uri;
+    var new_uri = uri;
+    new_uri.path.percent_encoded = std.mem.trimRight(u8, uri.path.percent_encoded, "/");
+    return new_uri;
 }
 
 pub fn deinit(self: *Self) void {
@@ -388,17 +386,182 @@ pub fn live(
     @compileError("TODO: Implement");
 }
 
-/// Fetch videos satisfying the given options. This corresponds to the
-/// `/videos` endpoint.
+/// Extra information to include for videos.
+pub const VideoIncludes = enum {
+    clips,
+    refers,
+    sources,
+    simulcasts,
+    mentions,
+    description,
+    live_info,
+    channel_stats,
+    songs,
+};
+
+/// Query options for `Api.videos`
+pub const VideosOptions = struct {
+    /// YouTube video ids. If not null, only these videos can be returned.
+    /// Other filters still apply.
+    video_ids: ?[]const []const u8 = null,
+    /// YouTube channel id. If not null, only videos from this channel can be
+    /// returned.
+    channel_id: ?[]const u8 = null,
+    /// Filter by any of the included types. Leave null to query all.
+    types: ?[]const datatypes.VideoFull.Type = null,
+    /// Only include videos of this topic. Leave null to disable this filter.
+    topic: ?datatypes.Topic = null,
+    /// Only include videos that have an `available_at` timestamp greater than
+    /// or equal to this value. Leave null to disable this filter.
+    from: ?datatypes.Timestamp = null,
+    /// Only include videos that have an `available_at` timestamp less than or
+    /// equal to this value. Leave null to disable this filter.
+    to: ?datatypes.Timestamp = null,
+    /// Filter by any of the included statuses. Leave null to query all.
+    statuses: ?[]const datatypes.VideoFull.Status = null,
+    /// Filter by any of the included languages. Leave null to query all.
+    langs: ?[]const datatypes.Language = null,
+    /// Only include videos that are upcoming within this many hours. Does not
+    /// filter out videos that are not `Status.upcoming`. Leave null to disable
+    /// this filter.
+    max_upcoming_hours: ?u64 = null,
+    /// Only include videos involving this organization. Leave null to disable
+    /// this filter.
+    org: ?datatypes.Organization = null,
+    /// Only include videos mentioning this channel, and are not posted on the
+    /// channel itself. Leave null to disable this filter.
+    mentioned_channel_id: ?[]const u8 = null,
+    /// List of additional information to include for each video.
+    includes: []const VideoIncludes = &.{},
+    /// Column to sort on.
+    sort: meta.FieldEnum(datatypes.VideoFull.Json) = .available_at,
+    /// Sort order.
+    order: SortOrder = .desc,
+    /// Offset to start at.
+    offset: u64 = 0,
+    /// Maximum number of channels to return. Must be greater than 0, and less
+    /// than or equal to `max_limit`.
+    limit: usize = 25,
+
+    const max_limit: usize = 100;
+};
+
+/// The Holodex API version of `VideosOptions`.
+const VideosOptionsApi = struct {
+    id: ?[]const []const u8,
+    channel_id: ?[]const u8,
+    status: ?[]const datatypes.VideoFull.Status,
+    lang: ?[]const datatypes.Language,
+    type: ?[]const datatypes.VideoFull.Type,
+    topic: ?datatypes.Topic,
+    include: ?[]const VideoIncludes,
+    org: ?datatypes.Organization,
+    mentioned_channel_id: ?[]const u8,
+    sort: meta.FieldEnum(datatypes.VideoFull.Json),
+    order: SortOrder,
+    limit: usize,
+    offset: u64,
+    paginated: ?bool,
+    max_upcoming_hours: ?u64,
+    from: ?datatypes.Timestamp,
+    to: ?datatypes.Timestamp,
+
+    pub fn fromLib(options: VideosOptions, paginated: bool) VideosOptionsApi {
+        return .{
+            .id = options.video_ids,
+            .channel_id = options.channel_id,
+            .status = options.statuses,
+            .lang = options.langs,
+            .type = options.types,
+            .topic = options.topic,
+            .include = if (options.includes.len == 0) null else options.includes,
+            .org = options.org,
+            .mentioned_channel_id = options.mentioned_channel_id,
+            .sort = options.sort,
+            .order = options.order,
+            .limit = options.limit,
+            .offset = options.offset,
+            .paginated = if (paginated) true else null,
+            .max_upcoming_hours = options.max_upcoming_hours,
+            .from = options.from,
+            .to = options.to,
+        };
+    }
+};
+
+fn videosAssumeLimit(
+    self: *Self,
+    allocator: Allocator,
+    options: VideosOptions,
+    fetch_options: FetchOptions,
+) FetchError!Response([]datatypes.VideoFull) {
+    return self.fetch(
+        []datatypes.VideoFull,
+        allocator,
+        .GET,
+        "/videos",
+        VideosOptionsApi.fromLib(options, false),
+        null,
+        fetch_options,
+    );
+}
+
+/// Fetch videos matching the given options. This corresponds to the `/videos`
+/// endpoint.
+///
+/// - Use `Api.videosWithTotal` to get the videos with a total.
+/// - Use `Api.pageVideos` to page through the results without a total.
 pub fn videos(
     self: *Self,
     allocator: Allocator,
+    options: VideosOptions,
     fetch_options: FetchOptions,
-) FetchError!Response([]datatypes.VideoFull) {
-    _ = self;
-    _ = allocator;
-    _ = fetch_options;
-    @compileError("TODO: Implement");
+) (FetchError || error{InvalidLimit})!Response([]datatypes.VideoFull) {
+    if (options.limit <= 0 or options.limit > VideosOptions.max_limit) return error.InvalidLimit;
+    return self.videosAssumeLimit(allocator, options, fetch_options);
+}
+
+/// The same as `videos`, but includes the total number of videos matching the
+/// given options.
+///
+/// - Use `Api.videos` to get the videos without a total.
+/// - Use `Api.pageVidoes` to page through the results without a total.
+pub fn videosWithTotal(
+    self: *Self,
+    allocator: Allocator,
+    options: VideosOptions,
+    fetch_options: FetchOptions,
+) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.VideoFull)) {
+    if (options.limit <= 0 or options.limit > VideosOptions.max_limit) return error.InvalidLimit;
+    return self.fetch(
+        WithTotal([]datatypes.VideoFull),
+        allocator,
+        .GET,
+        "/videos",
+        VideosOptionsApi.fromLib(options, true),
+        null,
+        fetch_options,
+    );
+}
+
+/// Create a pager that iterates over the results of `Api.videos`.
+/// `deinit` must be called on the returned pager to free the memory used by it.
+///
+/// - Use `Api.videos` to get the videos without a total.
+/// - Use `Api.videosWithTotal` to get the videos with a total.
+pub fn pageVideos(
+    self: *Self,
+    allocator: Allocator,
+    options: VideosOptions,
+    fetch_options: FetchOptions,
+) error{InvalidLimit}!Pager(datatypes.VideoFull, VideosOptions, videosAssumeLimit) {
+    if (options.limit <= 0 or options.limit > VideosOptions.max_limit) return error.InvalidLimit;
+    return Pager(datatypes.VideoFull, VideosOptions, videosAssumeLimit){
+        .allocator = allocator,
+        .api = self,
+        .options = options,
+        .fetch_options = fetch_options,
+    };
 }
 
 /// Fetch information about a YouTube channel. This corresponds to the
