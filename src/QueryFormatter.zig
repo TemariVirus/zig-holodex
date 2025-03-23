@@ -24,13 +24,14 @@ pub fn QueryFormatter(comptime T: type) type {
                         try writer.writeAll("&");
                     }
                     printed = true;
-                }
 
-                switch (@typeInfo(@TypeOf(value))) {
-                    .pointer => |info| try handlePointer(info, key, value, writer),
-                    .optional => try handleOptional(key, value, writer),
-                    .@"enum" => try handleEnum(key, value, writer),
-                    else => try writer.print("{s}={}", .{ percentEncode(key), percentEncode(value) }),
+                    try writer.print("{s}=", .{percentEncode(key)});
+                    switch (@typeInfo(@TypeOf(value))) {
+                        .pointer => |info| try handlePointer(info, value, writer),
+                        .optional => try handleOptional(value, writer),
+                        .@"enum" => try handleEnum(value, writer),
+                        else => try writer.print("{}", .{percentEncode(value)}),
+                    }
                 }
             }
         }
@@ -42,37 +43,44 @@ pub fn QueryFormatter(comptime T: type) type {
             };
         }
 
-        fn handleString(key: []const u8, value: []const u8, writer: anytype) !void {
-            try writer.print("{s}={s}", .{ percentEncode(key), percentEncode(value) });
+        fn handleString(value: []const u8, writer: anytype) !void {
+            try writer.print("{s}", .{percentEncode(value)});
         }
 
-        fn handlePointer(info: std.builtin.Type.Pointer, key: []const u8, value: anytype, writer: anytype) !void {
+        fn handlePointer(info: std.builtin.Type.Pointer, value: anytype, writer: anytype) !void {
             if (info.child == u8) {
-                try handleString(key, value, writer);
+                try handleString(value, writer);
             } else {
-                // Array of strings
-                try writer.print("{s}=", .{percentEncode(key)});
+                // Array of strings or enums
                 for (value, 0..) |item, j| {
                     if (j != 0) {
                         try writer.writeAll(",");
                     }
-                    try writer.print("{s}", .{percentEncode(item)});
+                    switch (@typeInfo(@TypeOf(item))) {
+                        .pointer => try handleString(item, writer),
+                        .@"enum" => try handleEnum(item, writer),
+                        else => @compileError("Expected string or enum, found '" ++ @typeName(@TypeOf(item)) ++ "'"),
+                    }
                 }
             }
         }
 
-        fn handleOptional(key: []const u8, value: anytype, writer: anytype) !void {
+        fn handleOptional(value: anytype, writer: anytype) !void {
             if (value) |val| {
                 switch (@typeInfo(@TypeOf(val))) {
-                    .pointer => |info| try handlePointer(info, key, val, writer),
-                    .@"enum" => try handleEnum(key, val, writer),
-                    else => try writer.print("{s}={}", .{ percentEncode(key), percentEncode(val) }),
+                    .pointer => |info| try handlePointer(info, val, writer),
+                    .@"enum" => try handleEnum(val, writer),
+                    else => try writer.print("{}", .{percentEncode(val)}),
                 }
             }
         }
 
-        fn handleEnum(key: []const u8, value: anytype, writer: anytype) !void {
-            try handleString(key, @tagName(value), writer);
+        fn handleEnum(value: anytype, writer: anytype) !void {
+            // Use value's format method if it exists
+            if (std.meta.hasMethod(@TypeOf(value), "format")) {
+                return writer.print("{}", .{percentEncode(value)});
+            }
+            try handleString(@tagName(value), writer);
         }
     };
 }
@@ -103,10 +111,11 @@ test formatQuery {
         list: []const []const u8,
         @"enum": enum { @"69%", sleepingTogether },
         @"日本語🙃": ?[]const u8,
+        list_of_enums: ?[]const enum { a, b, c } = null,
     };
 
     try testing.expectFmt(
-        "holodex.net/ya/goo?int=42&str=Man%20I%20Love%20Fauna&list=,,oui%20oui,PP,%E3%81%A1%E3%82%93%E3%81%A1%E3%82%93&enum=69%25",
+        "holodex.net/ya/goo?int=42&str=Man%20I%20Love%20Fauna&list=,,oui%20oui,PP,%E3%81%A1%E3%82%93%E3%81%A1%E3%82%93&enum=69%25&list_of_enums=a,b",
         "holodex.net/ya/goo?{}",
         .{formatQuery(&TestQuery{
             .null = null,
@@ -115,6 +124,7 @@ test formatQuery {
             .list = &.{ "", "", "oui oui", "PP", "ちんちん" },
             .@"enum" = .@"69%",
             .@"日本語🙃" = null,
+            .list_of_enums = &.{ .a, .b },
         })},
     );
 
