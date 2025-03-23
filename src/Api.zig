@@ -399,7 +399,7 @@ pub const VideoIncludes = enum {
     songs,
 };
 
-/// Query options for `Api.videos`
+/// Query options for `videos` and `videoWithTotal`.
 pub const VideosOptions = struct {
     /// YouTube video ids. If not null, only these videos can be returned.
     /// Other filters still apply.
@@ -509,8 +509,8 @@ fn videosAssumeLimit(
 /// Fetch videos matching the given options. This corresponds to the `/videos`
 /// endpoint.
 ///
-/// - Use `Api.videosWithTotal` to get the videos with a total.
-/// - Use `Api.pageVideos` to page through the results without a total.
+/// - Use `videosWithTotal` to get the videos with a total.
+/// - Use `pageVideos` to page through the results without a total.
 pub fn videos(
     self: *Self,
     allocator: Allocator,
@@ -524,8 +524,8 @@ pub fn videos(
 /// The same as `videos`, but includes the total number of videos matching the
 /// given options.
 ///
-/// - Use `Api.videos` to get the videos without a total.
-/// - Use `Api.pageVidoes` to page through the results without a total.
+/// - Use `videos` to get the videos without a total.
+/// - Use `pageVidoes` to page through the results without a total.
 pub fn videosWithTotal(
     self: *Self,
     allocator: Allocator,
@@ -544,11 +544,11 @@ pub fn videosWithTotal(
     );
 }
 
-/// Create a pager that iterates over the results of `Api.videos`.
+/// Create a pager that iterates over the results of `videos`.
 /// `deinit` must be called on the returned pager to free the memory used by it.
 ///
-/// - Use `Api.videos` to get the videos without a total.
-/// - Use `Api.videosWithTotal` to get the videos with a total.
+/// - Use `videos` to get the videos without a total.
+/// - Use `videosWithTotal` to get the videos with a total.
 pub fn pageVideos(
     self: *Self,
     allocator: Allocator,
@@ -607,7 +607,7 @@ pub fn channelsLive(
     );
 }
 
-/// Query options for `Api.videoInfo`.
+/// Query options for `videoInfo`.
 pub const VideoInfoOptions = struct {
     /// The YouTube video ID.
     video_id: []const u8,
@@ -650,7 +650,7 @@ pub fn videoInfo(
     );
 }
 
-/// Query options for `Api.listChannels`.
+/// Query options for `listChannels`.
 pub const ListChannelsOptions = struct {
     /// Filter by type of channel. Leave null to query all.
     type: ?datatypes.ChannelFull.Type = null,
@@ -672,7 +672,7 @@ pub const ListChannelsOptions = struct {
 };
 
 /// List channels that match the given options. This corresponds to the
-/// `/channels` endpoint. Use `Api.pageChannels` to page through the results
+/// `/channels` endpoint. Use `pageChannels` to page through the results
 /// instead. The total amount of items is not directly reported by the API.
 pub fn listChannels(
     self: *Self,
@@ -701,7 +701,7 @@ fn listChannelsAssumeLimit(
     );
 }
 
-/// Create a pager that iterates over the results of `Api.listChannels`.
+/// Create a pager that iterates over the results of `listChannels`.
 /// `deinit` must be called on the returned pager to free the memory used by it.
 pub fn pageChannels(
     self: *Self,
@@ -718,7 +718,7 @@ pub fn pageChannels(
     };
 }
 
-/// Options for `Api.searchComments` and `Api.searchCommentsWithTotal`.
+/// Options for `searchComments` and `searchCommentsWithTotal`.
 pub const SearchCommentsOptions = struct {
     /// Search for comments containing this string (case insensitive).
     comment: []const u8,
@@ -800,8 +800,8 @@ fn searchCommentsAssumeLimit(
 /// Search for timestamp comments in streams matching the given options. This
 /// corresponds to the `/search/commentSearch` endpoint.
 ///
-/// - Use `Api.searchCommentsWithTotal` to get the comments with a total.
-/// - Use `Api.pageSearchComments` to page through the results without a total.
+/// - Use `searchCommentsWithTotal` to get the comments with a total.
+/// - Use `pageSearchComments` to page through the results without a total.
 pub fn searchComments(
     self: *Self,
     allocator: Allocator,
@@ -812,11 +812,11 @@ pub fn searchComments(
     return self.searchCommentsAssumeLimit(allocator, options, fetch_options);
 }
 
-/// The same as `Api.searchComments`, but includes the total number of comments
+/// The same as `searchComments`, but includes the total number of comments
 /// matching the given options.
 ///
-/// - Use `Api.searchComments` to get the comments without a total.
-/// - Use `Api.pageSearchComments` to page through the results without a total.
+/// - Use `searchComments` to get the comments without a total.
+/// - Use `pageSearchComments` to page through the results without a total.
 pub fn searchCommentsWithTotal(
     self: *Self,
     allocator: Allocator,
@@ -845,11 +845,11 @@ pub fn searchCommentsWithTotal(
     };
 }
 
-/// Create a pager that iterates over the results of `Api.searchComments`.
+/// Create a pager that iterates over the results of `searchComments`.
 /// `deinit` must be called on the returned pager to free the memory used by it.
 ///
-/// - Use `Api.searchComments` to get the comments without a total.
-/// - Use `Api.searchCommentsWithTotal` to get the comments with a total.
+/// - Use `searchComments` to get the comments without a total.
+/// - Use `searchCommentsWithTotal` to get the comments with a total.
 pub fn pageSearchComments(
     self: *Self,
     allocator: Allocator,
