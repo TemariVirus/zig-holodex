@@ -101,6 +101,8 @@ pub fn WithTotal(comptime T: type) type {
 }
 
 pub const InitOptions = struct {
+    /// The allocator to use for the http client.
+    allocator: Allocator,
     /// The API key to use for requests. This value must outlive it's `Api` instance.
     api_key: []const u8,
     /// The base URL of the API.
@@ -111,7 +113,7 @@ pub const InitOptions = struct {
         url: []const u8,
     } = .{ .uri = Uri.parse("https://holodex.net/api/v2") catch unreachable },
 };
-pub fn init(allocator: Allocator, options: InitOptions) InitError!Self {
+pub fn init(options: InitOptions) InitError!Self {
     const base_uri = removeTrailingSlash(switch (options.location) {
         .uri => |uri| uri,
         .url => |url| try Uri.parse(url),
@@ -126,7 +128,7 @@ pub fn init(allocator: Allocator, options: InitOptions) InitError!Self {
     return .{
         .api_key = options.api_key,
         .base_uri = base_uri,
-        .client = http.Client{ .allocator = allocator },
+        .client = http.Client{ .allocator = options.allocator },
     };
 }
 
@@ -307,16 +309,153 @@ fn httpToFetchError(err: HttpError) FetchError {
     }
 }
 
+/// Query options for `live` and `liveWithTotal`.
+pub const LiveOptions = struct {
+    /// YouTube video ids. If not null, only these videos can be returned.
+    /// Other filters still apply.
+    video_ids: ?[]const []const u8 = null,
+    /// YouTube channel id. If not null, only videos from this channel can be
+    /// returned.
+    channel_id: ?[]const u8 = null,
+    /// Filter by any of the included types.
+    types: []const datatypes.VideoFull.Type = &.{.stream},
+    /// Only include videos of this topic. Leave null to disable this filter.
+    topic: ?datatypes.Topic = null,
+    /// Filter by any of the included statuses. Must not include `Status.past`.
+    statuses: []const datatypes.VideoFull.Status = &.{ .live, .upcoming },
+    /// Filter by any of the included languages. Leave null to query all.
+    langs: ?[]const datatypes.Language = null,
+    /// Only include videos that are upcoming within this many hours. Does not
+    /// filter out videos that are not `Status.upcoming`.
+    max_upcoming_hours: u64 = 48,
+    /// Only include videos involving this organization. Leave null to disable
+    /// this filter.
+    org: ?datatypes.Organization = null,
+    /// Only include videos mentioning this channel, and are not posted on the
+    /// channel itself. Leave null to disable this filter.
+    mentioned_channel_id: ?[]const u8 = null,
+    /// List of additional information to include for each video. `live_info`
+    /// is always included, regardless of this field.
+    includes: []const VideoIncludes = &.{},
+    /// Column to sort on.
+    sort: meta.FieldEnum(datatypes.VideoFull.Json) = .available_at,
+    /// Sort order.
+    order: SortOrder = .asc,
+    /// Offset to start at.
+    offset: u64 = 0,
+    /// Maximum number of channels to return. Must be greater than 0, and less
+    /// than or equal to `max_limit`.
+    limit: u64 = 9999,
+
+    pub const max_limit: u64 = 100000;
+};
+
+/// The Holodex API version of `LiveOptions`.
+const LiveOptionsApi = struct {
+    id: ?[]const []const u8,
+    channel_id: ?[]const u8,
+    type: []const datatypes.VideoFull.Type,
+    topic: ?datatypes.Topic,
+    status: []const datatypes.VideoFull.Status,
+    lang: ?[]const datatypes.Language,
+    max_upcoming_hours: u64,
+    org: ?datatypes.Organization,
+    mentioned_channel_id: ?[]const u8,
+    include: ?[]const VideoIncludes,
+    sort: meta.FieldEnum(datatypes.VideoFull.Json),
+    order: SortOrder,
+    offset: u64,
+    limit: u64,
+    paginated: ?bool,
+
+    pub fn fromLib(options: LiveOptions, paginated: bool) LiveOptionsApi {
+        return LiveOptionsApi{
+            .id = options.video_ids,
+            .channel_id = options.channel_id,
+            .type = options.types,
+            .topic = options.topic,
+            .status = options.statuses,
+            .lang = options.langs,
+            .max_upcoming_hours = options.max_upcoming_hours,
+            .org = options.org,
+            .mentioned_channel_id = options.mentioned_channel_id,
+            .include = if (options.includes.len == 0) null else options.includes,
+            .sort = options.sort,
+            .order = options.order,
+            .offset = options.offset,
+            .limit = options.limit,
+            .paginated = if (paginated) true else null,
+        };
+    }
+};
+
+fn liveAssumeLimit(
+    self: *Self,
+    allocator: Allocator,
+    options: LiveOptions,
+) FetchError!Response([]datatypes.VideoFull) {
+    return self.fetch(
+        []datatypes.VideoFull,
+        allocator,
+        .GET,
+        "/live",
+        LiveOptionsApi.fromLib(options, false),
+        null,
+    );
+}
+
 /// Fetch currently upcoming or live streams. This corresponds to the `/live`
 /// endpoint. This is somewhat similar to calling `videos` but with default
 /// options, and `live_info` is always included.
+///
+/// - Use `liveWithTotal` to get the videos with a total.
+/// - Use `pageLive` to page through the results without a total.
 pub fn live(
     self: *Self,
     allocator: Allocator,
-) FetchError!Response([]datatypes.VideoFull) {
-    _ = self;
-    _ = allocator;
-    @compileError("TODO: Implement");
+    options: LiveOptions,
+) (FetchError || error{InvalidLimit})!Response([]datatypes.VideoFull) {
+    if (options.limit <= 0 or options.limit > LiveOptions.max_limit) return error.InvalidLimit;
+    return self.liveAssumeLimit(allocator, options);
+}
+
+/// The same as `live`, but includes the total number of videos matching the
+/// given options.
+///
+/// - Use `live` to get the videos without a total.
+/// - Use `pagelive` to page through the results without a total.
+pub fn liveWithTotal(
+    self: *Self,
+    allocator: Allocator,
+    options: LiveOptions,
+) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.VideoFull)) {
+    if (options.limit <= 0 or options.limit > LiveOptions.max_limit) return error.InvalidLimit;
+    return self.fetch(
+        WithTotal([]datatypes.VideoFull),
+        allocator,
+        .GET,
+        "/live",
+        LiveOptionsApi.fromLib(options, true),
+        null,
+    );
+}
+
+/// Create a pager that iterates over the results of `live`.
+/// `deinit` must be called on the returned pager to free the memory used by it.
+///
+/// - Use `live` to get the videos without a total.
+/// - Use `liveWithTotal` to get the videos with a total.
+pub fn pageLive(
+    self: *Self,
+    allocator: Allocator,
+    options: LiveOptions,
+) error{InvalidLimit}!Pager(datatypes.VideoFull, LiveOptions, liveAssumeLimit) {
+    if (options.limit <= 0 or options.limit > LiveOptions.max_limit) return error.InvalidLimit;
+    return Pager(datatypes.VideoFull, LiveOptions, liveAssumeLimit){
+        .allocator = allocator,
+        .api = self,
+        .options = options,
+    };
 }
 
 /// Extra information to include for videos.
