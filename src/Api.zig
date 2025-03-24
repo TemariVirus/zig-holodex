@@ -141,7 +141,8 @@ pub fn deinit(self: *Self) void {
 /// Helper function to fetch data from the API and parse it as JSON.
 /// Returns an error if the response status is not 200 OK.
 ///
-/// Only use this when you require the raw JSON.
+/// It is exposed to allow custom parsing of the response body through a
+/// `jsonParse` implementation in `T`.
 pub fn fetch(
     self: *Self,
     comptime T: type,
