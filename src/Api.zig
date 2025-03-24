@@ -365,7 +365,7 @@ pub const VideosOptions = struct {
     /// than or equal to `max_limit`.
     limit: usize = 25,
 
-    const max_limit: usize = 100;
+    pub const max_limit: usize = 100;
 };
 
 /// The Holodex API version of `VideosOptions`.
