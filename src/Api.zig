@@ -12,6 +12,8 @@ const Uri = std.Uri;
 const holodex = @import("root.zig");
 const datatypes = holodex.datatypes;
 const Pager = holodex.Pager;
+
+const formatQuery = @import("QueryFormatter.zig").formatQuery;
 const SearchCommentsResponse = @import("parser/SearchedComments.zig");
 
 const package_version = @import("lib").version;
@@ -171,7 +173,7 @@ pub fn fetch(
     uri.query = .{ .percent_encoded = try fmt.allocPrint(
         allocator,
         "{}",
-        .{holodex.formatQuery(&query)},
+        .{formatQuery(&query)},
     ) };
     defer allocator.free(uri.query.?.percent_encoded);
 

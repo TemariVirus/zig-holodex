@@ -2,7 +2,7 @@ const std = @import("std");
 const meta = std.meta;
 const testing = std.testing;
 
-const percentEncode = @import("root.zig").percentEncode;
+const percentEncode = @import("url.zig").percentEncode;
 
 /// Format a struct as a url query string.
 /// See `holodex.formatQuery` for more details.
