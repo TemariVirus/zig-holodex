@@ -11,13 +11,12 @@ const Api = @import("root.zig").Api;
 pub fn Pager(
     comptime T: type,
     comptime Options: type,
-    comptime apiFn: fn (*Api, Allocator, Options, Api.FetchOptions) Api.FetchError!Api.Response([]T),
+    comptime apiFn: fn (*Api, Allocator, Options) Api.FetchError!Api.Response([]T),
 ) type {
     return struct {
         allocator: Allocator,
         api: *Api,
         options: Options,
-        fetch_options: Api.FetchOptions,
         responses: ?Api.Response([]T) = null,
         responses_index: usize = 0,
 
@@ -76,7 +75,6 @@ pub fn Pager(
                 self.api,
                 self.allocator,
                 self.options,
-                self.fetch_options,
             );
             if (self.responses) |responses| {
                 responses.deinit();
@@ -99,7 +97,7 @@ test Pager {
     const apiFn = (struct {
         const MAX = 14; // Inclusive
 
-        pub fn apiFn(_: *Api, allocator: Allocator, options: Options, _: Api.FetchOptions) !Api.Response([]T) {
+        pub fn apiFn(_: *Api, allocator: Allocator, options: Options) !Api.Response([]T) {
             const arena = try allocator.create(std.heap.ArenaAllocator);
             arena.* = std.heap.ArenaAllocator.init(testing.allocator);
 
@@ -122,7 +120,6 @@ test Pager {
         .allocator = testing.allocator,
         .api = &api,
         .options = Options{ .mul = 2, .offset = 3 },
-        .fetch_options = .{},
     };
     defer pager.deinit();
 

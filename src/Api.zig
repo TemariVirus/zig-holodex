@@ -52,9 +52,6 @@ pub const FetchError = http.Client.ConnectTcpError || error{
     /// should be used.
     InvalidJsonResponse,
     OutOfMemory,
-    /// The response exceeded the maximum size allowed by
-    /// `FetchOptions.max_response_size`.
-    ResponseTooLarge,
     /// There was an error loading the TLS certificate bundle.
     TlsCertificateBundleLoadFailure,
     /// There usually isn't anything the user can do about this error, as they
@@ -205,14 +202,6 @@ pub fn deinit(self: *Self) void {
     self.client.deinit();
 }
 
-pub const FetchOptions = struct {
-    /// The behavior to use when a duplicate field is encountered in the JSON
-    /// response.
-    json_duplicate_field_behavior: meta.fieldInfo(json.ParseOptions, .duplicate_field_behavior).type = .@"error",
-    /// Whether to ignore unknown fields in the JSON response.
-    json_ignore_unknown_fields: bool = true,
-};
-
 /// Helper function to fetch data from the API and parse it as JSON.
 /// Returns an error if the response status is not 200 OK.
 ///
@@ -225,7 +214,6 @@ pub fn fetch(
     path: []const u8,
     query: anytype,
     payload: anytype,
-    options: FetchOptions,
 ) FetchError!Response(T) {
     const stringify_options: json.StringifyOptions = .{
         .emit_nonportable_numbers_as_strings = false,
@@ -293,8 +281,7 @@ pub fn fetch(
     defer body_reader.deinit();
     const parsed = json.parseFromTokenSource(T, allocator, &body_reader, .{
         .allocate = .alloc_always,
-        .ignore_unknown_fields = options.json_ignore_unknown_fields,
-        .duplicate_field_behavior = options.json_duplicate_field_behavior,
+        .ignore_unknown_fields = true,
     }) catch |err| switch (err) {
         error.OutOfMemory => return FetchError.OutOfMemory,
         else => return FetchError.InvalidJsonResponse,
@@ -378,11 +365,9 @@ fn httpToFetchError(err: HttpError) FetchError {
 pub fn live(
     self: *Self,
     allocator: Allocator,
-    fetch_options: FetchOptions,
 ) FetchError!Response([]datatypes.VideoFull) {
     _ = self;
     _ = allocator;
-    _ = fetch_options;
     @compileError("TODO: Implement");
 }
 
@@ -493,7 +478,6 @@ fn videosAssumeLimit(
     self: *Self,
     allocator: Allocator,
     options: VideosOptions,
-    fetch_options: FetchOptions,
 ) FetchError!Response([]datatypes.VideoFull) {
     return self.fetch(
         []datatypes.VideoFull,
@@ -502,7 +486,6 @@ fn videosAssumeLimit(
         "/videos",
         VideosOptionsApi.fromLib(options, false),
         null,
-        fetch_options,
     );
 }
 
@@ -515,10 +498,9 @@ pub fn videos(
     self: *Self,
     allocator: Allocator,
     options: VideosOptions,
-    fetch_options: FetchOptions,
 ) (FetchError || error{InvalidLimit})!Response([]datatypes.VideoFull) {
     if (options.limit <= 0 or options.limit > VideosOptions.max_limit) return error.InvalidLimit;
-    return self.videosAssumeLimit(allocator, options, fetch_options);
+    return self.videosAssumeLimit(allocator, options);
 }
 
 /// The same as `videos`, but includes the total number of videos matching the
@@ -530,7 +512,6 @@ pub fn videosWithTotal(
     self: *Self,
     allocator: Allocator,
     options: VideosOptions,
-    fetch_options: FetchOptions,
 ) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.VideoFull)) {
     if (options.limit <= 0 or options.limit > VideosOptions.max_limit) return error.InvalidLimit;
     return self.fetch(
@@ -540,7 +521,6 @@ pub fn videosWithTotal(
         "/videos",
         VideosOptionsApi.fromLib(options, true),
         null,
-        fetch_options,
     );
 }
 
@@ -553,14 +533,12 @@ pub fn pageVideos(
     self: *Self,
     allocator: Allocator,
     options: VideosOptions,
-    fetch_options: FetchOptions,
 ) error{InvalidLimit}!Pager(datatypes.VideoFull, VideosOptions, videosAssumeLimit) {
     if (options.limit <= 0 or options.limit > VideosOptions.max_limit) return error.InvalidLimit;
     return Pager(datatypes.VideoFull, VideosOptions, videosAssumeLimit){
         .allocator = allocator,
         .api = self,
         .options = options,
-        .fetch_options = fetch_options,
     };
 }
 
@@ -570,7 +548,6 @@ pub fn channelInfo(
     self: *Self,
     allocator: Allocator,
     id: []const u8,
-    fetch_options: FetchOptions,
 ) FetchError!Response(datatypes.ChannelFull) {
     const path = try fmt.allocPrint(allocator, "/channels/{s}", .{id});
     defer allocator.free(path);
@@ -581,7 +558,6 @@ pub fn channelInfo(
         path,
         empty_query,
         null,
-        fetch_options,
     );
 }
 
@@ -594,7 +570,6 @@ pub fn channelsLive(
     self: *Self,
     allocator: Allocator,
     channel_ids: []const []const u8,
-    fetch_options: FetchOptions,
 ) FetchError!Response([]datatypes.Video) {
     return self.fetch(
         []datatypes.Video,
@@ -603,7 +578,6 @@ pub fn channelsLive(
         "/users/live",
         .{ .channels = channel_ids },
         null,
-        fetch_options,
     );
 }
 
@@ -635,7 +609,6 @@ pub fn videoInfo(
     self: *Self,
     allocator: Allocator,
     options: VideoInfoOptions,
-    fetch_options: FetchOptions,
 ) FetchError!Response(datatypes.VideoFull) {
     const path = try fmt.allocPrint(allocator, "/videos/{s}", .{options.video_id});
     defer allocator.free(path);
@@ -646,7 +619,6 @@ pub fn videoInfo(
         path,
         VideoInfoOptionsApi.fromLib(options),
         null,
-        fetch_options,
     );
 }
 
@@ -678,17 +650,15 @@ pub fn listChannels(
     self: *Self,
     allocator: Allocator,
     options: ListChannelsOptions,
-    fetch_options: FetchOptions,
 ) (FetchError || error{InvalidLimit})!Response([]datatypes.Channel) {
     if (options.limit <= 0 or options.limit > ListChannelsOptions.max_limit) return error.InvalidLimit;
-    return self.listChannelsAssumeLimit(allocator, options, fetch_options);
+    return self.listChannelsAssumeLimit(allocator, options);
 }
 
 fn listChannelsAssumeLimit(
     self: *Self,
     allocator: Allocator,
     options: ListChannelsOptions,
-    fetch_options: FetchOptions,
 ) FetchError!Response([]datatypes.Channel) {
     return self.fetch(
         []datatypes.Channel,
@@ -697,7 +667,6 @@ fn listChannelsAssumeLimit(
         "/channels",
         options,
         null,
-        fetch_options,
     );
 }
 
@@ -707,14 +676,12 @@ pub fn pageChannels(
     self: *Self,
     allocator: Allocator,
     options: ListChannelsOptions,
-    fetch_options: FetchOptions,
 ) error{InvalidLimit}!Pager(datatypes.Channel, ListChannelsOptions, listChannelsAssumeLimit) {
     if (options.limit <= 0 or options.limit > ListChannelsOptions.max_limit) return error.InvalidLimit;
     return Pager(datatypes.Channel, ListChannelsOptions, listChannelsAssumeLimit){
         .allocator = allocator,
         .api = self,
         .options = options,
-        .fetch_options = fetch_options,
     };
 }
 
@@ -778,7 +745,6 @@ fn searchCommentsAssumeLimit(
     self: *Self,
     allocator: Allocator,
     options: SearchCommentsOptions,
-    fetch_options: FetchOptions,
 ) FetchError!Response([]datatypes.Comment) {
     const parsed = try self.fetch(
         SearchCommentsResponse,
@@ -787,7 +753,6 @@ fn searchCommentsAssumeLimit(
         "/search/commentSearch",
         empty_query,
         @as(?SearchCommentsOptionsApi, SearchCommentsOptionsApi.fromLib(options, false)),
-        fetch_options,
     );
     errdefer parsed.deinit();
     return .{
@@ -806,10 +771,9 @@ pub fn searchComments(
     self: *Self,
     allocator: Allocator,
     options: SearchCommentsOptions,
-    fetch_options: FetchOptions,
 ) (FetchError || error{InvalidLimit})!Response([]datatypes.Comment) {
     if (options.limit <= 0 or options.limit > SearchCommentsOptions.max_limit) return error.InvalidLimit;
-    return self.searchCommentsAssumeLimit(allocator, options, fetch_options);
+    return self.searchCommentsAssumeLimit(allocator, options);
 }
 
 /// The same as `searchComments`, but includes the total number of comments
@@ -821,7 +785,6 @@ pub fn searchCommentsWithTotal(
     self: *Self,
     allocator: Allocator,
     options: SearchCommentsOptions,
-    fetch_options: FetchOptions,
 ) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.Comment)) {
     if (options.limit <= 0 or options.limit > 100_000) return error.InvalidLimit;
 
@@ -832,7 +795,6 @@ pub fn searchCommentsWithTotal(
         "/search/commentSearch",
         empty_query,
         @as(?SearchCommentsOptionsApi, SearchCommentsOptionsApi.fromLib(options, true)),
-        fetch_options,
     );
     errdefer parsed.deinit();
     return .{
@@ -854,13 +816,11 @@ pub fn pageSearchComments(
     self: *Self,
     allocator: Allocator,
     options: SearchCommentsOptions,
-    fetch_options: FetchOptions,
 ) error{InvalidLimit}!Pager(datatypes.Comment, SearchCommentsOptions, searchCommentsAssumeLimit) {
     if (options.limit <= 0 or options.limit > SearchCommentsOptions.max_limit) return error.InvalidLimit;
     return Pager(datatypes.Comment, SearchCommentsOptions, searchCommentsAssumeLimit){
         .allocator = allocator,
         .api = self,
         .options = options,
-        .fetch_options = fetch_options,
     };
 }
