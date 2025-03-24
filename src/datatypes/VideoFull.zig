@@ -42,7 +42,7 @@ clips: ?[]const VideoMin = null,
 sources: ?[]const VideoMin = null,
 /// Videos linked in the description.
 refers: ?[]const VideoMin = null,
-/// TODO: What are simulcasts?
+/// Simulcasts of the video/the event featured in the video.
 simulcasts: ?[]const VideoMin = null,
 /// VTubers featured in this video.
 mentions: ?[]const datatypes.Vtuber = null,
