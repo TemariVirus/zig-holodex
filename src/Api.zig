@@ -189,6 +189,7 @@ pub fn fetch(
             .value = self.api_key,
         }},
         .keep_alive = true,
+        .redirect_behavior = @enumFromInt(3),
     }) catch |err| return httpToFetchError(err);
     defer req.deinit();
 
@@ -197,16 +198,25 @@ pub fn fetch(
             .content_length = countJsonLen(p, stringify_options),
         };
     }
-    req.send() catch |err| return httpToFetchError(err);
-    if (payload) |p| {
-        json.stringify(
-            p,
-            stringify_options,
-            req.writer(),
-        ) catch |err| return httpToFetchError(err);
+
+    // Redirect loop
+    while (true) {
+        req.send() catch |err| return httpToFetchError(err);
+        if (payload) |p| {
+            json.stringify(
+                p,
+                stringify_options,
+                req.writer(),
+            ) catch |err| return httpToFetchError(err);
+        }
+        req.finish() catch |err| return httpToFetchError(err);
+        req.wait() catch |err| switch (err) {
+            // req.redirect_behavior should prevent an infinite loop
+            http.Client.Request.WaitError.RedirectRequiresResend => continue,
+            else => return httpToFetchError(err),
+        };
+        break;
     }
-    req.finish() catch |err| return httpToFetchError(err);
-    req.wait() catch |err| return httpToFetchError(err);
 
     switch (req.response.status) {
         .ok => {},
@@ -257,6 +267,7 @@ fn httpToFetchError(err: HttpError) FetchError {
         http.Client.Request.WriteError.NotWriteable,
         http.Client.Request.FinishError.MessageNotCompleted,
         http.Client.Request.WaitError.HttpConnectionHeaderUnsupported,
+        http.Client.Request.WaitError.RedirectRequiresResend,
         => unreachable,
 
         http.Client.RequestError.ConnectionRefused,
@@ -288,8 +299,6 @@ fn httpToFetchError(err: HttpError) FetchError {
         http.Client.Request.WaitError.HttpRedirectLocationMissing,
         http.Client.Request.WaitError.HttpTransferEncodingUnsupported,
         http.Client.Request.WaitError.InvalidContentLength,
-        // TODO: Actually re-send instead of returning an error
-        http.Client.Request.WaitError.RedirectRequiresResend,
         http.Client.Request.WaitError.TlsAlert,
         http.Client.Request.WaitError.TlsFailure,
         http.Client.Request.WaitError.TooManyHttpRedirects,
