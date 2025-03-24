@@ -4,6 +4,7 @@ const json = std.json;
 const testing = std.testing;
 
 const Api = @import("root.zig").Api;
+const datatypes = @import("root.zig").datatypes;
 
 /// A pager that iterates over the results of an endpoint.
 /// `Options` must be a struct that contains an `offset` field of an integer type.
@@ -28,7 +29,7 @@ pub fn Pager(
 
         /// Return the headers of the last response, or `null` if there was no
         /// last response.
-        pub fn lastResponseHeaders(self: @This()) ?Api.ResponseHeaders {
+        pub fn lastResponseHeaders(self: @This()) ?datatypes.ResponseHeaders {
             if (self.responses) |res| {
                 return res.headers;
             }

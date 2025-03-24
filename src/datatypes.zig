@@ -4,6 +4,7 @@ const zeit = @import("zeit");
 pub const Channel = @import("datatypes/Channel.zig");
 pub const ChannelFull = @import("datatypes/ChannelFull.zig");
 pub const Comment = @import("datatypes/Comment.zig");
+pub const ResponseHeaders = @import("datatypes/ResponseHeaders.zig");
 pub const SearchedVideo = @import("datatypes/SearchedVideo.zig");
 pub const Song = @import("datatypes/Song.zig");
 pub const Uuid = @import("datatypes/Uuid.zig");
