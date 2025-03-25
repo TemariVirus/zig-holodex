@@ -1,5 +1,3 @@
-// TODO: Test thread safety
-
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
@@ -101,7 +99,10 @@ pub fn WithTotal(comptime T: type) type {
 }
 
 pub const InitOptions = struct {
-    /// The allocator to use for the http client.
+    /// The allocator to use for the http client. If accessing the `Api` instance
+    /// from multiple threads, this allocator must be thread-safe. The allocators
+    /// passed to other methods are used for allocating the response body and do
+    /// not need to be thread-safe.
     allocator: Allocator,
     /// The API key to use for requests. This value must outlive it's `Api` instance.
     api_key: []const u8,
