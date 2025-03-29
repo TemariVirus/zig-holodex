@@ -649,6 +649,135 @@ pub fn channelInfo(
     );
 }
 
+/// Query options for `channelVideos` and `channelVideosWithTotal`.
+pub const ChannelVideosOptions = struct {
+    /// YouTube channel id.
+    channel_id: []const u8,
+    /// Filter by type of video.
+    /// - `clips`: returns clips that mention the channel.
+    /// - `videos`: returns videos of the channel.
+    /// - `collabs`: returns streams that mention the channel.
+    type: enum { clips, videos, collabs },
+    /// Filter by any of the included languages. Leave null to query all.
+    /// Has no effect when `type` is `collabs`.
+    langs: ?[]const datatypes.Language = null,
+    /// Filter by any of the included types. Leave null to query all except
+    /// placeholders. Only applies when `type` is `videos`.
+    types: ?[]const datatypes.VideoFull.Type = null,
+    /// Filter by any of the included statuses. Leave null to query all.
+    statuses: ?[]const datatypes.VideoFull.Status = null,
+    /// List of additional information to include for each video.
+    includes: []const VideoIncludes = &.{},
+    /// Offset to start at.
+    offset: u64 = 0,
+    /// Maximum number of videos to return. Must be greater than 0, and less
+    /// than or equal to `max_limit`.
+    limit: usize = 25,
+
+    pub const max_limit: usize = 100;
+};
+/// The Holodex API version of `ChannelVideosOptions`.
+const ChannelVideosOptionsApi = struct {
+    lang: ?[]const datatypes.Language,
+    type: ?[]const datatypes.VideoFull.Type,
+    status: ?[]const datatypes.VideoFull.Status,
+    include: ?[]const VideoIncludes,
+    limit: usize,
+    offset: u64,
+    paginated: ?bool,
+
+    pub fn fromLib(options: ChannelVideosOptions, paginated: bool) ChannelVideosOptionsApi {
+        return ChannelVideosOptionsApi{
+            .lang = options.langs,
+            .type = options.types,
+            .status = options.statuses,
+            .include = if (options.includes.len == 0) null else options.includes,
+            .limit = options.limit,
+            .offset = options.offset,
+            .paginated = if (paginated) true else null,
+        };
+    }
+};
+
+fn channelVideosAssumeLimit(
+    self: *Self,
+    allocator: Allocator,
+    options: ChannelVideosOptions,
+) FetchError!Response([]datatypes.VideoFull) {
+    const path = try fmt.allocPrint(allocator, "/channels/{s}/{s}", .{
+        options.channel_id,
+        @tagName(options.type),
+    });
+    defer allocator.free(path);
+    return self.fetch(
+        []datatypes.VideoFull,
+        allocator,
+        .GET,
+        path,
+        ChannelVideosOptionsApi.fromLib(options, false),
+        null,
+    );
+}
+
+/// Fetch videos of the specified channel matching the specified options. This
+/// corresponds to the `channels/{channelId}/{type}` endpoint.
+///
+/// - Use `channelVideosWithTotal` to get the videos with a total.
+/// - Use `pagechannelVideos` to page through the results without a total.
+pub fn channelVideos(
+    self: *Self,
+    allocator: Allocator,
+    options: ChannelVideosOptions,
+) (FetchError || error{InvalidLimit})!Response([]datatypes.VideoFull) {
+    if (options.limit <= 0 or options.limit > ChannelVideosOptions.max_limit) return error.InvalidLimit;
+    return self.channelVideosAssumeLimit(allocator, options);
+}
+
+/// The same as `channelVideos`, but includes the total number of videos matching
+/// the given options.
+///
+/// - Use `channelVideos` to get the videos without a total.
+/// - Use `pageChannelVidoes` to page through the results without a total.
+pub fn channelVideosWithTotal(
+    self: *Self,
+    allocator: Allocator,
+    options: ChannelVideosOptions,
+) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.VideoFull)) {
+    if (options.limit <= 0 or options.limit > ChannelVideosOptions.max_limit) return error.InvalidLimit;
+
+    const path = try fmt.allocPrint(allocator, "/channels/{s}/{s}", .{
+        options.channel_id,
+        @tagName(options.type),
+    });
+    defer allocator.free(path);
+    return self.fetch(
+        WithTotal([]datatypes.VideoFull),
+        allocator,
+        .GET,
+        path,
+        ChannelVideosOptionsApi.fromLib(options, true),
+        null,
+    );
+}
+
+/// Create a pager that iterates over the results of `channelVideos`.
+/// `deinit` must be called on the returned pager to free the memory used by it.
+///
+/// - Use `channelVideos` to get the videos without a total.
+/// - Use `channelVideosWithTotal` to get the videos with a total.
+pub fn pageChannelVideos(
+    self: *Self,
+    allocator: Allocator,
+    options: ChannelVideosOptions,
+) error{InvalidLimit}!Pager(datatypes.VideoFull, ChannelVideosOptions, channelVideosAssumeLimit) {
+    if (options.limit <= 0 or options.limit > ChannelVideosOptions.max_limit) return error.InvalidLimit;
+    return Pager(datatypes.VideoFull, ChannelVideosOptions, channelVideosAssumeLimit){
+        .allocator = allocator,
+        .api = self,
+        .options = options,
+    };
+}
+
 /// Fetch currently upcoming or live streams for a set of channels. This
 /// corresponds to the `/users/live` endpoint. This is similar to calling
 /// `live` but replies much faster at the cost of customizability. Note that

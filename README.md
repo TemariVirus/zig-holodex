@@ -11,7 +11,7 @@ are guesswork from querying the API. This library is not affiliated with Holodex
 - [x] GET /live
 - [x] GET /videos
 - [x] GET /channels/{channelId}
-- [ ] GET /channels/{channelId}/{type}
+- [x] GET /channels/{channelId}/{type}
 - [x] GET /users/live
 - [x] GET /videos/{videoId}
 - [x] GET /channels
