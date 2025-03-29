@@ -7,7 +7,10 @@ const Api = @import("root.zig").Api;
 const datatypes = @import("root.zig").datatypes;
 
 /// A pager that iterates over the results of an endpoint.
-/// `Options` must be a struct that contains an `offset` field of an integer type.
+/// `Options` must be a struct that contains:
+///   - an `offset` field of an integer type.
+///   - a `limit` field of an integer type, that has a value greater than 0.
+///
 /// `deinit` must be called to free the memory used by the pager.
 pub fn Pager(
     comptime T: type,
@@ -66,8 +69,13 @@ pub fn Pager(
         fn tryNextPage(self: *@This()) Api.FetchError!void {
             // Return if we're not at the end of the current page or there are
             // no more pages.
-            if (self.responses) |responses| {
-                if (self.responses_index < responses.value.len or responses.value.len == 0) {
+            if (self.responses) |*responses| {
+                if (self.responses_index < responses.value.len) {
+                    return;
+                }
+                // This is the end of the last page
+                if (responses.value.len < self.options.limit) {
+                    responses.value = &.{};
                     return;
                 }
             }
