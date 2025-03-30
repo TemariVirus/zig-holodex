@@ -15,7 +15,7 @@ are guesswork from querying the API. This library is not affiliated with Holodex
 - [x] GET /users/live
 - [x] GET /videos/{videoId}
 - [x] GET /channels
-- [ ] POST /search/videoSearch
+- [x] POST /search/videoSearch
 - [x] POST /search/commentSearch
 
 ## Examples

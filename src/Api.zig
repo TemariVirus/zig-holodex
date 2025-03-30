@@ -902,6 +902,149 @@ pub fn pageChannels(
     };
 }
 
+/// Options for `searchVideos` and `searchVideosWithTotal`.
+pub const SearchVideosOptions = struct {
+    /// Search for videos containing all of these strings in their title or
+    /// description (case insensitive). Leave empty to disable this filter.
+    texts: []const []const u8 = &.{},
+    /// How to sort comments (based on the video they belong to).
+    sort: SearchOrder = .newest,
+    /// Only include clips in any of these languages. Does not affect streams.
+    /// Leave empty to disable this filter.
+    langs: []const datatypes.Language = &.{},
+    /// Only include videos of any of these types.
+    types: []const datatypes.VideoFull.Type = &.{ .clip, .stream },
+    /// Only include videos of any of these topics. A non-empty list will
+    /// filter out all clips, as clips do not have topics. Leave empty to
+    /// disable this filter.
+    topics: []const datatypes.Topic = &.{},
+    /// Only include videos involving all of these channels. If one of the
+    /// channels is a clipper, only clips mentioning all of the other channels
+    /// will be included. Leave empty to disable this filter.
+    channels: []const []const u8 = &.{},
+    /// Only include videos involving Vtubers from all of these organizations.
+    /// Leave empty to disable this filter.
+    orgs: []const datatypes.Organization = &.{},
+    /// Offset to start at.
+    offset: u64 = 0,
+    /// Maximum number of videos to return. Must be greater than 0, and less
+    /// than or equal to `max_limit`.
+    limit: usize = 30,
+
+    pub const max_limit: usize = 100_000;
+};
+/// The Holodex API version of `SearchVideosOptions`.
+const SearchVideosOptionsApi = struct {
+    conditions: ?ConditionsFormatter,
+    sort: SearchOrder,
+    langs: ?[]const datatypes.Language,
+    target: []const datatypes.VideoFull.Type,
+    topic: ?[]const datatypes.Topic,
+    vch: ?[]const []const u8,
+    org: ?[]const datatypes.Organization,
+    offset: u64,
+    limit: usize,
+    paginated: bool,
+
+    pub const ConditionsFormatter = struct {
+        conditions: []const []const u8,
+
+        pub fn jsonStringify(value: @This(), writer: anytype) @TypeOf(writer.*).Error!void {
+            try writer.beginArray();
+            for (value.conditions) |cond| {
+                try writer.beginObject();
+                try writer.objectField("text");
+                try writer.write(cond);
+                try writer.endObject();
+            }
+            try writer.endArray();
+        }
+    };
+
+    pub fn fromLib(options: SearchVideosOptions, paginated: bool) SearchVideosOptionsApi {
+        return SearchVideosOptionsApi{
+            .conditions = if (options.texts.len == 0) null else .{ .conditions = options.texts },
+            .sort = options.sort,
+            .langs = if (options.langs.len == 0) null else options.langs,
+            .target = options.types,
+            .topic = if (options.topics.len == 0) null else options.topics,
+            .vch = if (options.channels.len == 0) null else options.channels,
+            .org = if (options.orgs.len == 0) null else options.orgs,
+            .offset = options.offset,
+            .limit = options.limit,
+            .paginated = paginated,
+        };
+    }
+};
+
+fn searchVideosAssumeLimit(
+    self: *Self,
+    allocator: Allocator,
+    options: SearchVideosOptions,
+) FetchError!Response([]datatypes.Video) {
+    return self.fetch(
+        []datatypes.Video,
+        allocator,
+        .POST,
+        "/search/videoSearch",
+        empty_query,
+        @as(?SearchVideosOptionsApi, SearchVideosOptionsApi.fromLib(options, false)),
+    );
+}
+
+/// Search for videos matching the given options. This corresponds to the
+/// `/search/videoSearch` endpoint.
+///
+/// - Use `searchVideosWithTotal` to get the videos with a total.
+/// - Use `pageSearchVideos` to page through the results without a total.
+pub fn searchVideos(
+    self: *Self,
+    allocator: Allocator,
+    options: SearchVideosOptions,
+) (FetchError || error{InvalidLimit})!Response([]datatypes.Video) {
+    if (options.limit <= 0 or options.limit > SearchVideosOptions.max_limit) return error.InvalidLimit;
+    return self.searchVideosAssumeLimit(allocator, options);
+}
+
+/// The same as `searchVideos`, but includes the total number of videos
+/// matching the given options.
+///
+/// - Use `searchVideos` to get the videos without a total.
+/// - Use `pageSearchVideos` to page through the results without a total.
+pub fn searchVideosWithTotal(
+    self: *Self,
+    allocator: Allocator,
+    options: SearchVideosOptions,
+) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.Video)) {
+    if (options.limit <= 0 or options.limit > SearchVideosOptions.max_limit) return error.InvalidLimit;
+    return self.fetch(
+        WithTotal([]datatypes.Video),
+        allocator,
+        .POST,
+        "/search/videoSearch",
+        empty_query,
+        @as(?SearchVideosOptionsApi, SearchVideosOptionsApi.fromLib(options, true)),
+    );
+}
+
+/// Create a pager that iterates over the results of `searchVideos`.
+/// `deinit` must be called on the returned pager to free the memory used by it.
+///
+/// - Use `searchVideos` to get the videos without a total.
+/// - Use `searchVideosWithTotal` to get the videos with a total.
+pub fn pageSearchVideos(
+    self: *Self,
+    allocator: Allocator,
+    options: SearchVideosOptions,
+) error{InvalidLimit}!Pager(datatypes.Video, SearchVideosOptions, searchVideosAssumeLimit) {
+    if (options.limit <= 0 or options.limit > SearchVideosOptions.max_limit) return error.InvalidLimit;
+    return Pager(datatypes.Video, SearchVideosOptions, searchVideosAssumeLimit){
+        .allocator = allocator,
+        .api = self,
+        .options = options,
+    };
+}
+
 /// Options for `searchComments` and `searchCommentsWithTotal`.
 pub const SearchCommentsOptions = struct {
     /// Search for comments containing this string (case insensitive).
@@ -935,7 +1078,6 @@ const SearchCommentsOptionsApi = struct {
     sort: SearchOrder,
     comptime lang: ?[]const datatypes.Language = null,
     comptime target: ?[]const datatypes.VideoFull.Type = null,
-    // Questionable design choice, but okay.
     comment: [1][]const u8,
     topic: ?[]const datatypes.Topic,
     vch: ?[]const []const u8,
@@ -1003,7 +1145,7 @@ pub fn searchCommentsWithTotal(
     allocator: Allocator,
     options: SearchCommentsOptions,
 ) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.Comment)) {
-    if (options.limit <= 0 or options.limit > 100_000) return error.InvalidLimit;
+    if (options.limit <= 0 or options.limit > SearchCommentsOptions.max_limit) return error.InvalidLimit;
 
     const parsed = try self.fetch(
         WithTotal(SearchCommentsResponse),

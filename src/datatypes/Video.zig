@@ -102,10 +102,22 @@ pub fn jsonParse(
         start_scheduled: ?datatypes.Timestamp = null,
         start_actual: ?datatypes.Timestamp = null,
         end_actual: ?datatypes.Timestamp = null,
-        live_viewers: u64,
+        live_viewers: ?u64 = null,
         channel: Channel,
     };
+
     const parsed = try json.innerParse(Json, allocator, source, options);
+    // Use non-nullable `live_viewers` field to check if `live_info` should be `null`.
+    const live_info = if (parsed.live_viewers) |live_viewers|
+        datatypes.VideoFull.LiveInfo{
+            .start_scheduled = parsed.start_scheduled,
+            .start_actual = parsed.start_actual,
+            .end_actual = parsed.end_actual,
+            .live_viewers = live_viewers,
+        }
+    else
+        null;
+
     return Self{
         .id = parsed.id,
         .title = parsed.title,
@@ -115,12 +127,7 @@ pub fn jsonParse(
         .available_at = parsed.available_at,
         .duration = parsed.duration,
         .status = parsed.status,
-        .live_info = .{
-            .start_scheduled = parsed.start_scheduled,
-            .start_actual = parsed.start_actual,
-            .end_actual = parsed.end_actual,
-            .live_viewers = parsed.live_viewers,
-        },
+        .live_info = live_info,
         .channel = parsed.channel,
     };
 }
