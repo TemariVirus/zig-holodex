@@ -28,6 +28,8 @@ your_module.addImport("holodex", holodex.module("holodex"));
 
 ## Examples
 
+You can find your holodex API key at <https://holodex.net/login>.
+
 ### POST /search/commentSearch
 
 ```zig
