@@ -6,21 +6,29 @@ Note that as the [official documentation](https://docs.holodex.net/) is outdated
 any documentation here about API endpoints, their parameters, and their responses
 are guesswork from querying the API. This library is not affiliated with Holodex.
 
-## Supported Endpoints
+[Holodex API License](https://docs.holodex.net/#section/LICENSE)
 
-- [x] GET /live
-- [x] GET /videos
-- [x] GET /channels/{channelId}
-- [x] GET /channels/{channelId}/{type}
-- [x] GET /users/live
-- [x] GET /videos/{videoId}
-- [x] GET /channels
-- [x] POST /search/videoSearch
-- [x] POST /search/commentSearch
+## Installation
+
+Run the following command to add the package to your `build.zig.zon`:
+
+```sh
+zig fetch --save git+https://github.com/TemariVirus/zig-holodex#GIT_COMMIT_HASH_OR_TAG
+```
+
+Then, reference the package and import it into your module of choice in your `build.zig`:
+
+```zig
+const holodex = b.dependency("holodex", .{
+    .target = target,
+    .optimize = optimize,
+});
+your_module.addImport("holodex", holodex.module("holodex"));
+```
 
 ## Examples
 
-### GET /videos/{videoId}
+### POST /search/commentSearch
 
 ```zig
 const std = @import("std");
@@ -31,19 +39,24 @@ pub fn main() !void {
     const allocator = debug_allocator.allocator();
     defer _ = debug_allocator.deinit();
 
-    var api = holodex.Api.init(
-        allocator,
-        .{ .api_key = "YOUR-API-KEY-HERE" },
-    ) catch unreachable;
+    var api = holodex.Api.init(.{
+        .allocator = allocator,
+        .api_key = "YOUR-API-KEY-HERE",
+    }) catch unreachable;
     defer api.deinit();
 
-    const info = try api.videoInfo(allocator, .{
-        .comments = false,
-        .video_id = "lusGw2tPWpQ",
-    }, .{});
-    defer info.deinit();
+    const comments = try api.searchComments(allocator, .{
+        .comment = "if...",
+        .channels = &.{
+            "UCvaTdHTWBGv3MKj3KVqJVCw", // Okayu
+            "UChAnqc_AY5_I3Px5dig3X1Q", // Korone
+        },
+        .topics = &.{"singing"},
+    });
+    defer comments.deinit();
 
-    std.debug.print("{pretty}\n", .{info.value});
+    std.debug.print("value: {pretty}\n", .{comments.value});
+    std.debug.print("headers: {}\n", .{comments.headers});
 }
 ```
 
@@ -58,10 +71,10 @@ pub fn main() !void {
     const allocator = debug_allocator.allocator();
     defer _ = debug_allocator.deinit();
 
-    var api = holodex.Api.init(
-        allocator,
-        .{ .api_key = "YOUR-API-KEY-HERE" },
-    ) catch unreachable;
+    var api = holodex.Api.init(.{
+        .allocator = allocator,
+        .api_key = "YOUR-API-KEY-HERE",
+    }) catch unreachable;
     defer api.deinit();
 
     var pager = api.pageChannels(allocator, .{
@@ -70,20 +83,20 @@ pub fn main() !void {
         .org = holodex.datatypes.Organizations.hololive,
         .sort = .clip_count,
         .order = .desc,
-    }, .{});
+    }) catch unreachable;
     defer pager.deinit();
 
     var i: usize = 0;
     while (try pager.next()) |channel| {
+        std.debug.print("{s}'s clip count: {}\n", .{
+            channel.english_name orelse channel.name,
+            channel.stats.clip_count,
+        });
+        i += 1;
         if (i >= 20) {
             break;
         }
-
-        std.debug.print("{s}'s clip count: {}\n", .{
-            channel.english_name orelse channel.name,
-            channel.clip_count orelse 0,
-        });
-        i += 1;
     }
+    std.debug.print("Latest headers: {}\n", .{pager.lastResponseHeaders().?});
 }
 ```
