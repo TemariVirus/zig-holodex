@@ -34,6 +34,7 @@ top_topics: ?[]const datatypes.Topic = null,
 const Self = @This();
 pub const format = holodex.defaultFormat(@This(), struct {});
 
+/// Stats of a channel. Does not include `view_count`.
 pub const Stats = struct {
     /// Number of videos the channel has uploaded.
     video_count: u32,
@@ -43,7 +44,7 @@ pub const Stats = struct {
     clip_count: u32,
 };
 
-/// The JSON schema for a `Channel`.
+/// The JSON schema of a `Channel`.
 pub const Json = struct {
     id: []const u8,
     name: []const u8,

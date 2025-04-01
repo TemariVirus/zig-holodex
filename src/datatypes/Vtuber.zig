@@ -23,7 +23,7 @@ pub fn jsonParse(
     options: json.ParseOptions,
 ) json.ParseError(@TypeOf(source.*))!Self {
     // No need to include `type` field as it should always be `vtuber`
-    const Json = struct {
+    const parsed = try json.innerParse(struct {
         id: []const u8,
         name: []const u8,
         english_name: ?[]const u8 = null,
@@ -31,9 +31,8 @@ pub fn jsonParse(
         suborg: ?[]const u8 = null,
         photo: []const u8,
         lang: ?[]const u8 = null,
-    };
+    }, allocator, source, options);
 
-    const parsed = try json.innerParse(Json, allocator, source, options);
     const group = if (parsed.suborg) |suborg|
         if (suborg.len <= 2)
             null
@@ -42,6 +41,7 @@ pub fn jsonParse(
             suborg[2..]
     else
         null;
+
     return .{
         .id = parsed.id,
         .name = parsed.name,

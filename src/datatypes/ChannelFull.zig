@@ -79,7 +79,7 @@ pub fn jsonParse(
     source: anytype,
     options: json.ParseOptions,
 ) json.ParseError(@TypeOf(source.*))!Self {
-    const Json = struct {
+    const parsed = try json.innerParse(struct {
         id: []const u8,
         name: []const u8,
         english_name: ?datatypes.EnglishName = null,
@@ -105,8 +105,7 @@ pub fn jsonParse(
         yt_name_history: ?[]const []const u8 = null,
         crawled_at: ?datatypes.Timestamp = null,
         comments_crawled_at: ?datatypes.Timestamp = null,
-    };
-    const parsed = try json.innerParse(Json, allocator, source, options);
+    }, allocator, source, options);
     return .{
         .id = parsed.id,
         .name = parsed.name,

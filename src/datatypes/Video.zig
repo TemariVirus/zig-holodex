@@ -54,7 +54,7 @@ pub const Channel = struct {
         source: anytype,
         options: json.ParseOptions,
     ) json.ParseError(@TypeOf(source.*))!Channel {
-        const Json = struct {
+        const parsed = try json.innerParse(struct {
             id: []const u8,
             name: []const u8,
             english_name: ?[]const u8 = null,
@@ -62,9 +62,8 @@ pub const Channel = struct {
             org: ?[]const u8 = null,
             suborg: ?[]const u8 = null,
             photo: []const u8,
-        };
+        }, allocator, source, options);
 
-        const parsed = try json.innerParse(Json, allocator, source, options);
         const group = if (parsed.suborg) |suborg|
             if (suborg.len <= 2)
                 null
@@ -73,6 +72,7 @@ pub const Channel = struct {
                 suborg[2..]
         else
             null;
+
         return Channel{
             .id = parsed.id,
             .name = parsed.name,
@@ -90,7 +90,7 @@ pub fn jsonParse(
     source: anytype,
     options: json.ParseOptions,
 ) json.ParseError(@TypeOf(source.*))!Self {
-    const Json = struct {
+    const parsed = try json.innerParse(struct {
         id: []const u8,
         title: []const u8,
         type: datatypes.VideoFull.Type,
@@ -104,9 +104,8 @@ pub fn jsonParse(
         end_actual: ?datatypes.Timestamp = null,
         live_viewers: ?u64 = null,
         channel: Channel,
-    };
+    }, allocator, source, options);
 
-    const parsed = try json.innerParse(Json, allocator, source, options);
     // Use non-nullable `live_viewers` field to check if `live_info` should be `null`.
     const live_info = if (parsed.live_viewers) |live_viewers|
         datatypes.VideoFull.LiveInfo{

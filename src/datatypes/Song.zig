@@ -31,7 +31,7 @@ pub fn jsonParse(
     source: anytype,
     options: json.ParseOptions,
 ) json.ParseError(@TypeOf(source.*))!Self {
-    const Json = struct {
+    const parsed = try json.innerParse(struct {
         id: datatypes.Uuid,
         name: []const u8,
         original_artist: []const u8,
@@ -39,9 +39,7 @@ pub fn jsonParse(
         end: datatypes.VideoOffset,
         art: ?[]const u8 = null,
         itunesid: ?ItunesId = null,
-    };
-
-    const parsed = try json.innerParse(Json, allocator, source, options);
+    }, allocator, source, options);
     return Self{
         .holodex_id = parsed.id,
         .name = parsed.name,

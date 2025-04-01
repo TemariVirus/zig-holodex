@@ -206,7 +206,7 @@ pub const TimestampComment = struct {
     }
 };
 
-/// The JSON schema for a `VideoFull`.
+/// The JSON schema of a `VideoFull`.
 pub const Json = struct {
     id: []const u8,
     title: []const u8,
@@ -218,30 +218,21 @@ pub const Json = struct {
     status: Status,
     lang: ?datatypes.Language = null,
     live_tl_count: ?std.json.ArrayHashMap(u32) = null,
-    // Only returned when 'includes' contains 'description'
     description: ?[]const u8 = null,
     songscount: ?u32 = null,
-    // Only returned when 'includes' contains 'songs'
     songs: ?[]const datatypes.Song = null,
     channel: Channel,
 
-    // Only returned when 'includes' contains 'live_info'
     start_scheduled: ?datatypes.Timestamp = null,
     start_actual: ?datatypes.Timestamp = null,
     end_actual: ?datatypes.Timestamp = null,
     live_viewers: ?u64 = null,
 
-    // Only returned when 'includes' contains 'clips'
     clips: ?[]const VideoMin = null,
-    // Only returned when 'includes' contains 'sources'
     sources: ?[]const VideoMin = null,
-    // Only returned when 'includes' contains 'refers'
     refers: ?[]const VideoMin = null,
-    // Only returned when 'includes' contains 'simulcasts'
     simulcasts: ?[]const VideoMin = null,
-    // Only returned when 'includes' contains 'mentions'
     mentions: ?[]const datatypes.Vtuber = null,
-    // Only returned when c === '1', comments with timestamps only
     comments: ?[]const TimestampComment = null,
 };
 
