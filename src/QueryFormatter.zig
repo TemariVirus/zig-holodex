@@ -5,7 +5,7 @@ const testing = std.testing;
 const percentEncode = @import("url.zig").percentEncode;
 
 /// Format a struct as a url query string.
-/// See `holodex.formatQuery` for more details.
+/// See `formatQuery` for more details.
 pub fn QueryFormatter(comptime T: type) type {
     switch (@typeInfo(T)) {
         .@"struct" => {},

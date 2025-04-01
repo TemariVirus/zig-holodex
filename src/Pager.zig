@@ -31,7 +31,8 @@ pub fn Pager(
         }
 
         /// Return the headers of the last response, or `null` if there was no
-        /// last response.
+        /// last response. The returned value is guaranteed to be non-null if
+        /// `next` was called at least once.
         pub fn lastResponseHeaders(self: @This()) ?datatypes.ResponseHeaders {
             if (self.responses) |res| {
                 return res.headers;

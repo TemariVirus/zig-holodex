@@ -60,6 +60,19 @@ pub const FetchError = http.Client.ConnectTcpError || error{
     UnexpectedFetchFailure,
 };
 
+/// Extra information to include for videos.
+pub const VideoIncludes = enum {
+    clips,
+    refers,
+    sources,
+    simulcasts,
+    mentions,
+    description,
+    live_info,
+    channel_stats,
+    songs,
+};
+
 /// The order to sort results in.
 pub const SortOrder = enum {
     asc,
@@ -73,6 +86,7 @@ pub const SearchOrder = enum {
     longest,
 };
 
+/// Common wrapper for API responses.
 pub fn Response(comptime T: type) type {
     return struct {
         arena: *std.heap.ArenaAllocator,
@@ -89,6 +103,7 @@ pub fn Response(comptime T: type) type {
     };
 }
 
+/// Wrap T in a struct that includes a `total` field.
 pub fn WithTotal(comptime T: type) type {
     return struct {
         total: u64,
@@ -114,6 +129,8 @@ pub const InitOptions = struct {
         url: []const u8,
     } = .{ .uri = Uri.parse("https://holodex.net/api/v2") catch unreachable },
 };
+
+/// Call `deinit` to deinitialize the `Api` instance.
 pub fn init(options: InitOptions) InitError!Self {
     const base_uri = removeTrailingSlash(switch (options.location) {
         .uri => |uri| uri,
@@ -458,19 +475,6 @@ pub fn pageLive(
         .options = options,
     };
 }
-
-/// Extra information to include for videos.
-pub const VideoIncludes = enum {
-    clips,
-    refers,
-    sources,
-    simulcasts,
-    mentions,
-    description,
-    live_info,
-    channel_stats,
-    songs,
-};
 
 /// Query options for `videos` and `videoWithTotal`.
 pub const VideosOptions = struct {
