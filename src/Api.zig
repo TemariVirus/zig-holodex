@@ -176,6 +176,7 @@ pub fn deinit(self: *Self) void {
 /// Helper function to fetch data from the API and parse it as JSON.
 /// Returns an error if the response status is not 200 OK.
 ///
+/// `allocator` is used solely to allocate the response.
 /// `path` must be percent-encoded.
 ///
 /// This is exposed to allow custom parsing of the response body through a
@@ -197,20 +198,20 @@ pub fn fetch(
         .escape_unicode = false,
         .whitespace = .minified,
     };
+    var scratch: std.heap.ArenaAllocator = .init(self.client.allocator);
+    defer scratch.deinit();
 
     var uri = self.base_uri;
     uri.path.percent_encoded = try fmt.allocPrint(
-        allocator,
+        scratch.allocator(),
         "{s}{s}",
         .{ self.base_uri.path.percent_encoded, path },
     );
-    defer allocator.free(uri.path.percent_encoded);
     uri.query = .{ .percent_encoded = try fmt.allocPrint(
-        allocator,
+        scratch.allocator(),
         "{f}",
         .{formatQuery(&query)},
     ) };
-    defer allocator.free(uri.query.?.percent_encoded);
 
     var req = self.client.request(method, uri, .{
         .headers = .{
@@ -232,7 +233,7 @@ pub fn fetch(
     }
 
     // Redirect loop
-    var redirect_buffer: [1024]u8 = undefined;
+    var redirect_buffer: [255]u8 = undefined;
     var res: http.Client.Response = while (true) {
         if (payload) |p| {
             var body = req.sendBodyUnflushed(&.{}) catch
@@ -287,11 +288,10 @@ pub fn fetch(
     var decompress: http.Decompress = undefined;
     const decompress_buffer: []u8 = switch (res.head.content_encoding) {
         .identity => &.{},
-        .zstd => try allocator.alloc(u8, std.compress.zstd.default_window_len),
-        .deflate, .gzip => try allocator.alloc(u8, std.compress.flate.max_window_len),
+        .zstd => try scratch.allocator().alloc(u8, std.compress.zstd.default_window_len),
+        .deflate, .gzip => try scratch.allocator().alloc(u8, std.compress.flate.max_window_len),
         .compress => return FetchError.UnexpectedFetchFailure,
     };
-    defer allocator.free(decompress_buffer);
 
     var body_reader = json.Reader.init(allocator, res.readerDecompressing(
         &transfer_buffer,
@@ -669,8 +669,9 @@ pub fn channelInfo(
     allocator: Allocator,
     id: []const u8,
 ) FetchError!Response(datatypes.ChannelFull) {
-    const path = try fmt.allocPrint(allocator, "/channels/{s}", .{id});
-    defer allocator.free(path);
+    const scratch = self.client.allocator;
+    const path = try fmt.allocPrint(scratch, "/channels/{s}", .{id});
+    defer scratch.free(path);
     return self.fetch(
         datatypes.ChannelFull,
         allocator,
@@ -736,11 +737,12 @@ fn channelVideosAssumeLimit(
     allocator: Allocator,
     options: ChannelVideosOptions,
 ) FetchError!Response([]datatypes.VideoFull) {
-    const path = try fmt.allocPrint(allocator, "/channels/{s}/{s}", .{
+    const scratch = self.client.allocator;
+    const path = try fmt.allocPrint(scratch, "/channels/{s}/{s}", .{
         options.channel_id,
         @tagName(options.type),
     });
-    defer allocator.free(path);
+    defer scratch.free(path);
     return self.fetch(
         []datatypes.VideoFull,
         allocator,
@@ -777,11 +779,12 @@ pub fn channelVideosWithTotal(
 ) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.VideoFull)) {
     if (options.limit <= 0 or options.limit > ChannelVideosOptions.max_limit) return error.InvalidLimit;
 
-    const path = try fmt.allocPrint(allocator, "/channels/{s}/{s}", .{
+    const scratch = self.client.allocator;
+    const path = try fmt.allocPrint(scratch, "/channels/{s}/{s}", .{
         options.channel_id,
         @tagName(options.type),
     });
-    defer allocator.free(path);
+    defer scratch.free(path);
     return self.fetch(
         WithTotal([]datatypes.VideoFull),
         allocator,
@@ -859,8 +862,9 @@ pub fn videoInfo(
     allocator: Allocator,
     options: VideoInfoOptions,
 ) FetchError!Response(datatypes.VideoFull) {
-    const path = try fmt.allocPrint(allocator, "/videos/{s}", .{options.video_id});
-    defer allocator.free(path);
+    const scratch = self.client.allocator;
+    const path = try fmt.allocPrint(scratch, "/videos/{s}", .{options.video_id});
+    defer scratch.free(path);
     return self.fetch(
         datatypes.VideoFull,
         allocator,
