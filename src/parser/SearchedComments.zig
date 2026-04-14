@@ -21,10 +21,10 @@ pub fn jsonParse(
         return error.UnexpectedToken;
     }
 
-    var searched_videos: std.ArrayList(datatypes.SearchedVideo) = .init(allocator);
-    errdefer searched_videos.deinit();
-    var comments: std.ArrayList(datatypes.Comment) = .init(allocator);
-    errdefer comments.deinit();
+    var searched_videos: std.ArrayList(datatypes.SearchedVideo) = .empty;
+    errdefer searched_videos.deinit(allocator);
+    var comments: std.ArrayList(datatypes.Comment) = .empty;
+    errdefer comments.deinit(allocator);
 
     while (true) {
         if (try source.peekNextTokenType() == .array_end) {
@@ -55,10 +55,10 @@ pub fn jsonParse(
             options,
         );
 
-        try searched_videos.append(searched_video);
+        try searched_videos.append(allocator, searched_video);
     }
 
-    searched_videos.shrinkAndFree(searched_videos.items.len);
+    searched_videos.shrinkAndFree(allocator, searched_videos.items.len);
     // Add pointer to the offset now that searched_videos will not move
     for (comments.items) |*comment| {
         comment.video = @ptrFromInt(@intFromPtr(searched_videos.items.ptr) +
@@ -66,7 +66,7 @@ pub fn jsonParse(
             @sizeOf(datatypes.SearchedVideo)); // Subtract 1 to get the offset
     }
     return .{
-        .comments = try comments.toOwnedSlice(),
+        .comments = try comments.toOwnedSlice(allocator),
     };
 }
 
@@ -103,6 +103,6 @@ fn parseComments(
         // Set as offset from searched_videos[0] + 1 for now. We cannot use 0 as it
         // is reserved for null pointers.
         comment.video = @ptrFromInt(@sizeOf(datatypes.SearchedVideo) * (ctx.video_count + 1));
-        try ctx.comments.append(comment);
+        try ctx.comments.append(allocator, comment);
     }
 }

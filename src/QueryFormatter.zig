@@ -1,6 +1,7 @@
 const std = @import("std");
 const meta = std.meta;
 const testing = std.testing;
+const Writer = std.Io.Writer;
 
 const percentEncode = @import("url.zig").percentEncode;
 
@@ -15,7 +16,7 @@ pub fn QueryFormatter(comptime T: type) type {
     return struct {
         query: *const T,
 
-        pub fn format(self: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        pub fn format(self: @This(), writer: *Writer) !void {
             var printed = false;
             inline for (comptime meta.fieldNames(T)) |key| {
                 const value = @field(self.query, key);
@@ -25,12 +26,14 @@ pub fn QueryFormatter(comptime T: type) type {
                     }
                     printed = true;
 
-                    try writer.print("{s}=", .{percentEncode(key)});
+                    try percentEncode(writer, "{s}", key);
+                    try writer.writeByte('=');
                     switch (@typeInfo(@TypeOf(value))) {
                         .pointer => |info| try handlePointer(info, value, writer),
                         .optional => try handleOptional(value, writer),
                         .@"enum" => try handleEnum(value, writer),
-                        else => try writer.print("{}", .{percentEncode(value)}),
+                        .@"struct" => try percentEncode(writer, "{f}", value),
+                        else => try percentEncode(writer, "{any}", value),
                     }
                 }
             }
@@ -43,11 +46,11 @@ pub fn QueryFormatter(comptime T: type) type {
             };
         }
 
-        fn handleString(value: []const u8, writer: anytype) !void {
-            try writer.print("{s}", .{percentEncode(value)});
+        fn handleString(value: []const u8, writer: *Writer) !void {
+            try percentEncode(writer, "{s}", value);
         }
 
-        fn handlePointer(info: std.builtin.Type.Pointer, value: anytype, writer: anytype) !void {
+        fn handlePointer(info: std.builtin.Type.Pointer, value: anytype, writer: *Writer) !void {
             if (info.child == u8) {
                 try handleString(value, writer);
             } else {
@@ -65,20 +68,21 @@ pub fn QueryFormatter(comptime T: type) type {
             }
         }
 
-        fn handleOptional(value: anytype, writer: anytype) !void {
+        fn handleOptional(value: anytype, writer: *Writer) !void {
             if (value) |val| {
                 switch (@typeInfo(@TypeOf(val))) {
                     .pointer => |info| try handlePointer(info, val, writer),
                     .@"enum" => try handleEnum(val, writer),
-                    else => try writer.print("{}", .{percentEncode(val)}),
+                    .@"struct" => try percentEncode(writer, "{f}", val),
+                    else => try percentEncode(writer, "{any}", val),
                 }
             }
         }
 
-        fn handleEnum(value: anytype, writer: anytype) !void {
+        fn handleEnum(value: anytype, writer: *Writer) !void {
             // Use value's format method if it exists
             if (std.meta.hasMethod(@TypeOf(value), "format")) {
-                return writer.print("{}", .{percentEncode(value)});
+                return percentEncode(writer, "{f}", value);
             }
             try handleString(@tagName(value), writer);
         }
@@ -96,7 +100,7 @@ pub fn QueryFormatter(comptime T: type) type {
 ///     bar: ?u32,
 /// };
 /// const query = Query{ .foo = "hello world", .bar = null };
-/// std.debug.print("example.com{}", .{ formatQuery(&query) });
+/// std.debug.print("example.com{f}", .{ formatQuery(&query) });
 /// // Output: example.com?foo=hello%20world
 /// ```
 pub fn formatQuery(query: anytype) QueryFormatter(meta.Child(@TypeOf(query))) {
@@ -116,7 +120,7 @@ test formatQuery {
 
     try testing.expectFmt(
         "holodex.net/ya/goo?int=42&str=Man%20I%20Love%20Fauna&list=,,oui%20oui,PP,%E3%81%A1%E3%82%93%E3%81%A1%E3%82%93&enum=69%25&list_of_enums=a,b",
-        "holodex.net/ya/goo?{}",
+        "holodex.net/ya/goo?{f}",
         .{formatQuery(&TestQuery{
             .null = null,
             .int = 42,
@@ -130,7 +134,7 @@ test formatQuery {
 
     try testing.expectFmt(
         "holodex.net/ya/goo?null=Hopes%20and%20dreams&int=0&str=hololive%20is%20an%20idol%20group%20like%20AKB48&list=&enum=sleepingTogether&%E6%97%A5%E6%9C%AC%E8%AA%9E%F0%9F%99%83=%E9%87%8F%E5%AD%90%E3%83%81%E3%82%AD%E3%83%B3%E3%82%B9%E3%83%BC%E3%83%97%E3%82%B0%E3%83%A9%E3%82%B9%E3%83%93%E3%83%83%E3%82%B0%E3%83%81%E3%83%A5%E3%83%B3%E3%82%B0%E3%82%B9%E3%80%80%F0%9F%8F%83%F0%9F%92%A8%F0%9F%90%89",
-        "holodex.net/ya/goo?{}",
+        "holodex.net/ya/goo?{f}",
         .{formatQuery(&TestQuery{
             .null = "Hopes and dreams",
             .int = 0,

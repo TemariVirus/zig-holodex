@@ -35,23 +35,15 @@ pub fn build(b: *std.Build) void {
 }
 
 fn libVersion(b: *std.Build) []const u8 {
-    const Ast = std.zig.Ast;
-
-    var ast = Ast.parse(b.allocator, @embedFile("build.zig.zon"), .zon) catch
-        @panic("Out of memory");
-    defer ast.deinit(b.allocator);
-
-    var buf: [2]Ast.Node.Index = undefined;
-    const zon = ast.fullStructInit(&buf, ast.nodes.items(.data)[0].lhs) orelse
-        @panic("Failed to parse build.zig.zon");
-
-    for (zon.ast.fields) |field| {
-        const field_name = ast.tokenSlice(ast.firstToken(field) - 2);
-        if (std.mem.eql(u8, field_name, "version")) {
-            const version_string = ast.tokenSlice(ast.firstToken(field));
-            // Remove surrounding quotes
-            return version_string[1 .. version_string.len - 1];
-        }
-    }
-    @panic("Field 'version' missing from build.zig.zon");
+    const BuildZigZon = struct {
+        version: []const u8,
+    };
+    const build_zig_zon = std.zon.parse.fromSlice(
+        BuildZigZon,
+        b.allocator,
+        @embedFile("build.zig.zon"),
+        null,
+        .{ .ignore_unknown_fields = true },
+    ) catch @panic("String field 'version' missing from build.zig.zon");
+    return build_zig_zon.version;
 }

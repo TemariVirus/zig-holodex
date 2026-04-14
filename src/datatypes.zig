@@ -1,4 +1,6 @@
 const std = @import("std");
+const Writer = std.Io.Writer;
+
 const zeit = @import("zeit");
 
 pub const Channel = @import("datatypes/Channel.zig");
@@ -38,31 +40,20 @@ pub const VideoOffset = enum(u32) {
         return @enumFromInt(s);
     }
 
-    pub fn format(self: VideoOffset, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        if (std.mem.eql(u8, fmt, "raw")) {
-            try writer.print("{d}", .{self.seconds()});
-            return;
-        }
-
+    pub fn format(self: VideoOffset, writer: *Writer) Writer.Error!void {
         // Use YouTube format: DDD:HH:MM:SS
         const d = self.seconds() / (24 * 60 * 60);
         const h = (self.seconds() / (60 * 60)) % 24;
         const m = (self.seconds() / 60) % 60;
         const s = self.seconds() % 60;
 
-        // Worst case: "XXXXX:XX:XX:XX"
-        var buf: [14]u8 = undefined;
-        var fbs = std.io.fixedBufferStream(&buf);
-        const buf_writer = fbs.writer();
         if (d > 0) {
-            buf_writer.print("{d}:{d:0>2}:{d:0>2}:{d:0>2}", .{ d, h, m, s }) catch unreachable;
+            try writer.print("{d}:{d:0>2}:{d:0>2}:{d:0>2}", .{ d, h, m, s });
         } else if (h > 0) {
-            buf_writer.print("{d}:{d:0>2}:{d:0>2}", .{ h, m, s }) catch unreachable;
+            try writer.print("{d}:{d:0>2}:{d:0>2}", .{ h, m, s });
         } else {
-            buf_writer.print("{d}:{d:0>2}", .{ m, s }) catch unreachable;
+            try writer.print("{d}:{d:0>2}", .{ m, s });
         }
-
-        try std.fmt.formatBuf(fbs.getWritten(), options, writer);
     }
 };
 
@@ -78,17 +69,12 @@ pub const Duration = enum(u32) {
         return @enumFromInt(s);
     }
 
-    pub fn format(self: Duration, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        if (std.mem.eql(u8, fmt, "raw")) {
-            try writer.print("{d}", .{self.seconds()});
-            return;
-        }
-
+    pub fn format(self: Duration, writer: *Writer) Writer.Error!void {
         if (self.seconds() == 0) {
-            // Using `std.fmt.fmtDuration` will print `0ns` instead
-            try std.fmt.formatBuf("0s", options, writer);
+            // Using `writer.printDuration` will print `0ns` instead
+            try writer.writeAll("0s");
         } else {
-            try std.fmt.fmtDuration(@as(u64, self.seconds()) * std.time.ns_per_s).format(fmt, options, writer);
+            try writer.printDuration(@as(u64, self.seconds()) * std.time.ns_per_s, .{});
         }
     }
 
@@ -136,16 +122,16 @@ pub const Timestamp = enum(i64) {
     }
 
     pub fn jsonParse(
-        allocator: std.mem.Allocator,
+        _: std.mem.Allocator,
         source: anytype,
         _: std.json.ParseOptions,
     ) std.json.ParseError(@TypeOf(source.*))!Timestamp {
         // Worst case: "-XXXXXXXXXXXX-XX-XXTXX:XX:XXZ"
         var buf: [29]u8 = undefined;
-        var list: std.ArrayList(u8) = .{
+        var list: std.array_list.Managed(u8) = .{
             .items = buf[0..0],
             .capacity = buf.len,
-            .allocator = allocator,
+            .allocator = undefined,
         };
 
         const str = try source.allocNextIntoArrayListMax(
@@ -158,22 +144,16 @@ pub const Timestamp = enum(i64) {
         };
     }
 
-    pub fn format(self: Timestamp, comptime _: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        // Worst case: "-XXXXXXXXXXXX-XX-XXTXX:XX:XXZ"
-        var buf: [29]u8 = undefined;
-        var fbs = std.io.fixedBufferStream(&buf);
-        const buf_writer = fbs.writer();
-
-        self.toInstant().time().strftime(buf_writer, "%Y-%m-%dT%H:%M:%SZ") catch |err| switch (err) {
+    pub fn format(self: Timestamp, writer: *Writer) Writer.Error!void {
+        self.toInstant().time().strftime(writer, "%Y-%m-%dT%H:%M:%SZ") catch |err| switch (err) {
             error.InvalidFormat,
+            error.NoSpaceLeft,
             error.Overflow,
             error.UnsupportedSpecifier,
             error.UnknownSpecifier,
             => unreachable,
-            else => return err,
+            error.WriteFailed => return error.WriteFailed,
         };
-
-        try std.fmt.formatBuf(fbs.getWritten(), options, writer);
     }
 
     pub fn add(self: Timestamp, duration: Duration) Timestamp {

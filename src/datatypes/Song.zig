@@ -22,7 +22,8 @@ art: ?[]const u8,
 itunes_id: ?ItunesId,
 
 const Self = @This();
-pub const format = holodex.defaultFormat(@This(), struct {});
+pub const format = holodex.DefaultFormat(@This(), struct {}).format;
+pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
 
 pub const ItunesId = enum(u64) { _ };
 

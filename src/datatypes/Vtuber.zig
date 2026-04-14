@@ -15,7 +15,8 @@ photo: []const u8,
 lang: ?[]const u8 = null,
 
 const Self = @This();
-pub const format = holodex.defaultFormat(@This(), struct {});
+pub const format = holodex.DefaultFormat(@This(), struct {}).format;
+pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
 
 pub fn jsonParse(
     allocator: std.mem.Allocator,

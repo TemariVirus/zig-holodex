@@ -50,7 +50,7 @@ mentions: ?[]const datatypes.Vtuber = null,
 timestamp_comments: ?[]const TimestampComment = null,
 
 const Self = @This();
-pub const format = holodex.defaultFormat(@This(), struct {
+const F = holodex.DefaultFormat(@This(), struct {
     pub fn live_tl_count(
         value: ?std.StringArrayHashMapUnmanaged(u32),
         comptime _: []const u8,
@@ -76,6 +76,8 @@ pub const format = holodex.defaultFormat(@This(), struct {
         }
     }
 });
+pub const format = F.format;
+pub const prettyFormat = F.prettyFormat;
 
 /// Type of a video.
 pub const Type = enum {
@@ -128,7 +130,8 @@ pub const Channel = struct {
     /// Channel statistics.
     stats: ?datatypes.ChannelFull.Stats,
 
-    pub const format = holodex.defaultFormat(@This(), struct {});
+    pub const format = holodex.DefaultFormat(@This(), struct {}).format;
+    pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
 
     pub fn jsonParse(
         allocator: std.mem.Allocator,
@@ -188,7 +191,8 @@ pub const TimestampComment = struct {
     content: []const u8,
 
     const Self = @This();
-    pub const format = holodex.defaultFormat(@This(), struct {});
+    pub const format = holodex.DefaultFormat(@This(), struct {}).format;
+    pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
 
     pub fn jsonParse(
         allocator: std.mem.Allocator,

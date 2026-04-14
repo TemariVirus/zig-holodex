@@ -57,8 +57,8 @@ pub fn main() !void {
     });
     defer comments.deinit();
 
-    std.debug.print("value: {pretty}\n", .{comments.value});
-    std.debug.print("headers: {}\n", .{comments.headers});
+    std.debug.print("value: {f}\n", .{holodex.pretty(comments.value)});
+    std.debug.print("headers: {f}\n", .{comments.headers});
 }
 ```
 
@@ -90,7 +90,7 @@ pub fn main() !void {
 
     var i: usize = 0;
     while (try pager.next()) |channel| {
-        std.debug.print("{s}'s clip count: {}\n", .{
+        std.debug.print("{s}'s clip count: {d}\n", .{
             channel.english_name orelse channel.name,
             channel.stats.clip_count,
         });
@@ -99,6 +99,6 @@ pub fn main() !void {
             break;
         }
     }
-    std.debug.print("Latest headers: {}\n", .{pager.lastResponseHeaders().?});
+    std.debug.print("Latest headers: {f}\n", .{pager.lastResponseHeaders().?});
 }
 ```

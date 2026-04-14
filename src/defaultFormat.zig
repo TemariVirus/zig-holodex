@@ -1,124 +1,121 @@
 const std = @import("std");
 const assert = std.debug.assert;
-const formatBuf = std.fmt.formatBuf;
 const mem = std.mem;
+const Writer = std.Io.Writer;
 
-fn PrettyFormatter(comptime Writer: type) type {
-    return struct {
-        writer: Writer,
-        indents: usize = 0,
-        pretty_mode: bool,
+const PrettyFormatter = struct {
+    out: *Writer,
+    writer: Writer = .{
+        .buffer = &.{},
+        .vtable = &.{
+            .drain = &drain,
+        },
+    },
+    indents: usize = 0,
 
-        const INDENT_SIZE = 4;
+    const INDENT_SIZE = 4;
 
-        pub fn indent(self: *@This()) void {
-            self.indents += INDENT_SIZE;
-        }
+    pub fn init(writer: *Writer) @This() {
+        return .{ .out = writer };
+    }
 
-        pub fn unIndent(self: *@This()) void {
-            assert(self.indents >= INDENT_SIZE);
-            self.indents -= INDENT_SIZE;
-        }
+    pub fn indent(self: *@This()) void {
+        self.indents += INDENT_SIZE;
+    }
 
-        pub fn nextField(self: @This()) Writer.Error!void {
-            if (self.pretty_mode) {
-                try self.writer.writeByte('\n');
-                try self.writer.writeByteNTimes(' ', self.indents);
-            } else {
-                try self.writer.writeByte(' ');
-            }
-        }
+    pub fn unIndent(self: *@This()) void {
+        assert(self.indents >= INDENT_SIZE);
+        self.indents -= INDENT_SIZE;
+    }
 
-        fn writeFn(ctx: *const anyopaque, bytes: []const u8) Writer.Error!usize {
-            const self: *const @This() = @ptrCast(@alignCast(ctx));
-            // Fast path
-            if (!self.pretty_mode or self.indents == 0) {
-                return self.writer.write(bytes);
-            }
+    pub fn nextField(self: @This()) Writer.Error!void {
+        try self.out.writeByte('\n');
+        try self.out.splatByteAll(' ', self.indents);
+    }
 
-            var start: usize = 0;
-            var end: usize = 0;
-            while (end < bytes.len) {
-                const c = bytes[end];
-                const len = try std.unicode.utf8ByteSequenceLength(c);
-                if (try std.unicode.utf8ByteSequenceLength(c) != 1) {
-                    end += len;
-                    continue;
+    pub fn writeString(self: @This(), str: []const u8) Writer.Error!void {
+        try std.json.Stringify.encodeJsonString(str, .{ .escape_unicode = false }, self.out);
+    }
+
+    /// Formats and writes the given bytes to `self.out`, returning the number of input bytes written.
+    fn write(self: @This(), bytes: []const u8) Writer.Error!usize {
+        var written: usize = 0;
+        var start: usize = 0;
+        var end: usize = 0;
+        while (end < bytes.len) {
+            const c = bytes[end];
+            if (c == '\n') {
+                const n = try self.out.write(bytes[start..end]);
+                written += n;
+                if (n < end - start) {
+                    return written;
                 }
-
-                if (c == '\n') {
-                    try self.writer.writeAll(bytes[start..end]);
-                    try self.nextField();
-                    start = end + 1;
-                }
+                try self.nextField();
+                start = end + 1;
                 end += 1;
+            } else {
+                end += std.unicode.utf8ByteSequenceLength(c) catch 1;
             }
-
-            try self.writer.writeAll(bytes[start..]);
-            return bytes.len;
         }
 
-        pub fn anyWriter(self: *const @This()) std.io.AnyWriter {
-            return std.io.AnyWriter{ .context = @ptrCast(self), .writeFn = &writeFn };
-        }
-    };
-}
+        written += try self.out.write(bytes[start..]);
+        return written;
+    }
 
-fn StringWriter(comptime Writer: type) type {
-    return struct {
-        writer: Writer,
+    fn drain(w: *Writer, data: []const []const u8, splat: usize) Writer.Error!usize {
+        const self: *const @This() = @fieldParentPtr("writer", w);
 
-        // This is solely used for padding in `std.fmt.formatBuf`.
-        pub fn writeBytesNTimes(self: @This(), fill: []const u8, padding: usize) !void {
-            try self.writer.writeBytesNTimes(fill, padding);
+        // Fast path
+        if (self.indents == 0) {
+            return self.out.writeSplat(data, splat);
         }
 
-        // This is solely used for writing `buf` in `std.fmt.formatBuf`.
-        pub fn writeAll(self: @This(), buf: []const u8) !void {
-            try std.json.encodeJsonString(buf, .{ .escape_unicode = false }, self.writer);
+        var written: usize = 0;
+        for (data[0 .. data.len - 1]) |str| {
+            const n = try self.write(str);
+            written += n;
+            if (n < str.len) {
+                return written;
+            }
         }
-    };
-}
+        for (0..splat) |_| {
+            const str = data[data.len - 1];
+            const n = try self.write(str);
+            written += n;
+            if (n < str.len) {
+                return written;
+            }
+        }
+        return written;
+    }
+};
 
 // Adapted from `std.fmt.formatType`
-fn format(
+fn prettify(
     value: anytype,
-    comptime fmt: []const u8,
-    options: std.fmt.FormatOptions,
-    pretty_formatter: anytype,
+    pretty_formatter: *PrettyFormatter,
     comptime Overwrites: type,
     comptime max_depth: usize,
     comptime is_root: bool,
-) @TypeOf(pretty_formatter.writer).Error!void {
+) Writer.Error!void {
     const T = @TypeOf(value);
-    const writer = pretty_formatter.writer;
-    if (comptime mem.eql(u8, fmt, "*")) {
-        return std.fmt.formatAddress(value, options, writer);
+    const writer = &pretty_formatter.writer;
+
+    if (!is_root) {
+        if (std.meta.hasMethod(T, "prettyFormat")) {
+            return value.prettyFormat(pretty_formatter, max_depth);
+        }
+        if (std.meta.hasMethod(T, "format")) {
+            return value.format(writer);
+        }
     }
 
-    const is_raw = comptime mem.eql(u8, fmt, "raw");
-    const is_pretty = comptime mem.eql(u8, fmt, "pretty");
-    if (std.meta.hasMethod(T, "format") and !is_root and !is_raw) {
-        return value.format(fmt, options, pretty_formatter.anyWriter());
-    }
-
-    const string_writer = StringWriter(@TypeOf(writer)){ .writer = writer };
-    const simple_type_fmt = switch (@typeInfo(T)) {
-        .comptime_int,
-        .int,
-        .comptime_float,
-        .float,
-        => if (is_raw or is_pretty) "" else fmt,
-        .bool => "",
-        .@"enum" => |info| if (info.is_exhaustive or is_raw or is_pretty) "" else fmt,
-        else => fmt,
-    };
     switch (@typeInfo(T)) {
         .optional => {
             if (value) |payload| {
-                return format(payload, fmt, options, pretty_formatter, Overwrites, max_depth, false);
+                return prettify(payload, pretty_formatter, Overwrites, max_depth, false);
             } else {
-                return formatBuf("null", options, writer);
+                return writer.writeAll("null");
             }
         },
         .@"union" => |info| {
@@ -132,10 +129,8 @@ fn format(
                 try writer.writeAll(" = ");
                 inline for (info.fields) |u_field| {
                     if (value == @field(UnionTagType, u_field.name)) {
-                        try format(
+                        try prettify(
                             @field(value, u_field.name),
-                            fmt,
-                            options,
                             pretty_formatter,
                             struct {},
                             max_depth - 1,
@@ -161,10 +156,8 @@ fn format(
                     } else {
                         try writer.writeAll(", ");
                     }
-                    try format(
+                    try prettify(
                         @field(value, f.name),
-                        fmt,
-                        options,
                         pretty_formatter,
                         struct {},
                         max_depth - 1,
@@ -192,9 +185,9 @@ fn format(
                 // Overwrite field formatting if it exists
                 if (std.meta.hasMethod(Overwrites, f.name)) {
                     const formatFn = @field(Overwrites, f.name);
-                    try formatFn(@field(value, f.name), fmt, options, pretty_formatter.anyWriter());
+                    try formatFn(@field(value, f.name), pretty_formatter.anyWriter());
                 } else {
-                    try format(@field(value, f.name), fmt, options, pretty_formatter, struct {}, max_depth - 1, false);
+                    try prettify(@field(value, f.name), pretty_formatter, struct {}, max_depth - 1, false);
                 }
             }
             pretty_formatter.unIndent();
@@ -204,7 +197,7 @@ fn format(
         .pointer => |ptr_info| switch (ptr_info.size) {
             .one => switch (@typeInfo(ptr_info.child)) {
                 .array, .@"enum", .@"union", .@"struct" => {
-                    return format(value.*, fmt, options, pretty_formatter, Overwrites, max_depth, false);
+                    return prettify(value.*, pretty_formatter, Overwrites, max_depth, false);
                 },
                 else => return std.fmt.format(
                     writer,
@@ -214,25 +207,25 @@ fn format(
             },
             .many, .c => {
                 if (ptr_info.sentinel()) |_| {
-                    return format(mem.span(value), fmt, options, pretty_formatter, Overwrites, max_depth, false);
+                    return prettify(mem.span(value), pretty_formatter, Overwrites, max_depth, false);
                 }
-                if (ptr_info.child == u8 and !is_raw) {
-                    return formatBuf(mem.span(value), options, string_writer);
+                if (ptr_info.child == u8) {
+                    return pretty_formatter.writeString(mem.span(value));
                 }
                 @compileError("Non-sentinel terminated pointer types must use '*' format string");
             },
             .slice => {
+                if (ptr_info.child == u8) {
+                    return pretty_formatter.writeString(value);
+                }
                 if (max_depth == 0) {
                     return writer.writeAll("{ ... }");
-                }
-                if (ptr_info.child == u8 and !is_raw) {
-                    return formatBuf(value, options, string_writer);
                 }
                 try writer.writeByte('{');
                 pretty_formatter.indent();
                 try pretty_formatter.nextField();
                 for (value, 0..) |elem, i| {
-                    try format(elem, fmt, options, pretty_formatter, Overwrites, max_depth - 1, false);
+                    try prettify(elem, pretty_formatter, Overwrites, max_depth - 1, false);
                     if (i != value.len - 1) {
                         try writer.writeByte(',');
                         try pretty_formatter.nextField();
@@ -243,21 +236,18 @@ fn format(
                 try writer.writeByte('}');
             },
         },
-        .array => |_| return format(&value, fmt, options, pretty_formatter, Overwrites, max_depth, false),
-        else => return std.fmt.formatType(value, simple_type_fmt, options, writer, max_depth),
+        .array => |_| return prettify(&value, pretty_formatter, Overwrites, max_depth, false),
+        else => return writer.printValue("", .{}, value, max_depth),
     }
 }
 
-/// Create a default format function for a type. Passing in "raw" as the format
-/// string will format the value without calling any custom format methods.
+/// Create a default format function for a type.
 ///
 /// The `Overwrites` type is a struct that contains methods of the form:
 /// ```zig
 /// pub fn fieldName(
 ///     value: @TypeOf(T.fieldName),
-///     comptime fmt: []const u8,
-///     options: std.fmt.FormatOptions,
-///     writer: anytype,
+///     writer: *std.Io.Writer,
 /// ) @TypeOf(writer).Error!void {
 ///     // custom formatting logic for `T.fieldName`
 /// }
@@ -266,31 +256,46 @@ fn format(
 /// function will be called instead of the default formatting function. This
 /// behaviour carries through optionals, pointers, slices, and arrays, but not
 /// through unions or structs.
-pub fn defaultFormat(
+pub fn DefaultFormat(
     comptime T: type,
     comptime Overwrites: type,
-) fn (T, comptime []const u8, std.fmt.FormatOptions, anytype) anyerror!void {
-    return (struct {
-        pub fn f(
-            value: T,
-            comptime fmt: []const u8,
-            options: std.fmt.FormatOptions,
-            writer: anytype,
-        ) @TypeOf(writer).Error!void {
-            const is_pretty = comptime mem.eql(u8, fmt, "pretty");
-            var pretty_formatter = PrettyFormatter(@TypeOf(writer)){
-                .writer = writer,
-                .pretty_mode = is_pretty,
-            };
-            return format(
+) type {
+    return struct {
+        pub fn format(value: T, writer: *Writer) Writer.Error!void {
+            var pretty_formatter: PrettyFormatter = .init(writer);
+            return prettify(
                 value,
-                fmt,
-                options,
                 &pretty_formatter,
                 Overwrites,
                 std.options.fmt_max_depth,
                 true,
             );
         }
-    }).f;
+
+        pub fn prettyFormat(
+            value: T,
+            pretty_formatter: *PrettyFormatter,
+            comptime max_depth: usize,
+        ) Writer.Error!void {
+            return prettify(
+                value,
+                pretty_formatter,
+                Overwrites,
+                max_depth,
+                true,
+            );
+        }
+    };
+}
+
+/// Pretty prints a value.
+///
+/// ```zig
+/// std.debug.print("{f}\n", .{holodex.pretty(value)});
+/// ```
+pub fn pretty(value: anytype) std.fmt.Alt(
+    @TypeOf(value),
+    DefaultFormat(@TypeOf(value), struct {}).format,
+) {
+    return .{ .data = value };
 }

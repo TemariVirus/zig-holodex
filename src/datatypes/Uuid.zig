@@ -93,7 +93,7 @@ pub fn jsonParse(
     _: std.json.ParseOptions,
 ) std.json.ParseError(@TypeOf(source.*))!@This() {
     var buf: [36]u8 = undefined;
-    var list: std.ArrayList(u8) = .{
+    var list: std.array_list.Managed(u8) = .{
         .items = buf[0..0],
         .capacity = buf.len,
         .allocator = allocator,
@@ -106,35 +106,24 @@ pub fn jsonParse(
     return parse(str) catch return error.UnexpectedToken;
 }
 
-pub fn format(
-    value: @This(),
-    comptime _: []const u8,
-    options: std.fmt.FormatOptions,
-    writer: anytype,
-) @TypeOf(writer).Error!void {
-    var buf: [36]u8 = undefined;
-    var fbs = std.io.fixedBufferStream(&buf);
-    const buf_writer = fbs.writer();
-
+pub fn format(value: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
     for (value.bytes[0..4]) |byte| {
-        buf_writer.print("{x:0>2}", .{byte}) catch unreachable;
+        try writer.print("{x:0>2}", .{byte});
     }
-    buf_writer.writeByte('-') catch unreachable;
+    try writer.writeByte('-');
     for (value.bytes[4..6]) |byte| {
-        buf_writer.print("{x:0>2}", .{byte}) catch unreachable;
+        try writer.print("{x:0>2}", .{byte});
     }
-    buf_writer.writeByte('-') catch unreachable;
+    try writer.writeByte('-');
     for (value.bytes[6..8]) |byte| {
-        buf_writer.print("{x:0>2}", .{byte}) catch unreachable;
+        try writer.print("{x:0>2}", .{byte});
     }
-    buf_writer.writeByte('-') catch unreachable;
+    try writer.writeByte('-');
     for (value.bytes[8..10]) |byte| {
-        buf_writer.print("{x:0>2}", .{byte}) catch unreachable;
+        try writer.print("{x:0>2}", .{byte});
     }
-    buf_writer.writeByte('-') catch unreachable;
+    try writer.writeByte('-');
     for (value.bytes[10..16]) |byte| {
-        buf_writer.print("{x:0>2}", .{byte}) catch unreachable;
+        try writer.print("{x:0>2}", .{byte});
     }
-
-    try std.fmt.formatBuf(fbs.getWritten(), options, writer);
 }

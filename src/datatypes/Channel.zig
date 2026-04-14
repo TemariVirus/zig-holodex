@@ -32,7 +32,8 @@ inactive: bool,
 top_topics: ?[]const datatypes.Topic = null,
 
 const Self = @This();
-pub const format = holodex.defaultFormat(@This(), struct {});
+pub const format = holodex.DefaultFormat(@This(), struct {}).format;
+pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
 
 /// Stats of a channel. Does not include `view_count`.
 pub const Stats = struct {

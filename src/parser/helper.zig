@@ -39,7 +39,7 @@ pub fn maxKeyLen(comptime field_names: []const []const u8) usize {
 
 pub fn JsonKey(comptime field_names: []const []const u8) type {
     @setEvalBranchQuota(field_names.len * 3);
-    return std.BoundedArray(u8, maxKeyLen(field_names));
+    return @import("bounded_array.zig").BoundedArray(u8, maxKeyLen(field_names));
 }
 
 /// Get the next key in the JSON object. The returned key may not be in the

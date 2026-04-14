@@ -36,6 +36,8 @@ pub const InitError = Uri.ParseError || error{
     UnsupportedUriScheme,
     /// The URI is missing a host.
     UriMissingHost,
+    /// The URI host is longer than `std.Uri.host_name_max`.
+    UriHostTooLong,
 };
 
 /// Errors that can occur when fetching data from the API.
@@ -93,7 +95,8 @@ pub fn Response(comptime T: type) type {
         headers: datatypes.ResponseHeaders,
         value: T,
 
-        pub const format = holodex.defaultFormat(@This(), struct {});
+        pub const format = holodex.DefaultFormat(@This(), struct {}).format;
+        pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
 
         pub fn deinit(self: @This()) void {
             const allocator = self.arena.child_allocator;
@@ -109,7 +112,7 @@ pub fn WithTotal(comptime T: type) type {
         total: u64,
         items: T,
 
-        pub const format = holodex.defaultFormat(@This(), struct {});
+        pub const format = holodex.DefaultFormat(@This(), struct {});
     };
 }
 
@@ -132,16 +135,22 @@ pub const InitOptions = struct {
 
 /// Call `deinit` to deinitialize the `Api` instance.
 pub fn init(options: InitOptions) InitError!Self {
-    const base_uri = removeTrailingSlash(switch (options.location) {
+    var base_uri = removeTrailingSlash(switch (options.location) {
         .uri => |uri| uri,
         .url => |url| try Uri.parse(url),
     });
 
-    const supported_schemes: std.StaticStringMap(void) = .initComptime(
-        .{ .{"http"}, .{"https"} },
-    );
+    const supported_schemes: std.StaticStringMap(void) = .initComptime(.{
+        .{"http"},
+        .{"https"},
+    });
     if (!supported_schemes.has(base_uri.scheme)) return InitError.UnsupportedUriScheme;
-    if (base_uri.host == null) return InitError.UriMissingHost;
+    {
+        // Verify that we can get the host before making any requests
+        var host_name_buffer: [Uri.host_name_max]u8 = undefined;
+        _ = try base_uri.getHost(&host_name_buffer);
+    }
+    base_uri.path = try @import("url.zig").percentEncodePath(base_uri.path);
 
     return .{
         .api_key = options.api_key,
@@ -152,7 +161,11 @@ pub fn init(options: InitOptions) InitError!Self {
 
 fn removeTrailingSlash(uri: Uri) Uri {
     var new_uri = uri;
-    new_uri.path.percent_encoded = std.mem.trimRight(u8, uri.path.percent_encoded, "/");
+    switch (new_uri.path) {
+        .raw,
+        .percent_encoded,
+        => |*path| path.* = std.mem.trimRight(u8, path.*, "/"),
+    }
     return new_uri;
 }
 
@@ -163,7 +176,9 @@ pub fn deinit(self: *Self) void {
 /// Helper function to fetch data from the API and parse it as JSON.
 /// Returns an error if the response status is not 200 OK.
 ///
-/// It is exposed to allow custom parsing of the response body through a
+/// `path` must be percent-encoded.
+///
+/// This is exposed to allow custom parsing of the response body through a
 /// `jsonParse` implementation in `T`.
 pub fn fetch(
     self: *Self,
@@ -174,7 +189,7 @@ pub fn fetch(
     query: anytype,
     payload: anytype,
 ) FetchError!Response(T) {
-    const stringify_options: json.StringifyOptions = .{
+    const stringify_options: json.Stringify.Options = .{
         .emit_nonportable_numbers_as_strings = false,
         // Skip null optional fields to save network bandwidth.
         .emit_null_optional_fields = false,
@@ -192,25 +207,22 @@ pub fn fetch(
     defer allocator.free(uri.path.percent_encoded);
     uri.query = .{ .percent_encoded = try fmt.allocPrint(
         allocator,
-        "{}",
+        "{f}",
         .{formatQuery(&query)},
     ) };
     defer allocator.free(uri.query.?.percent_encoded);
 
-    var server_header_buffer: [16 * 1024]u8 = undefined;
-    var req = self.client.open(method, uri, .{
-        .server_header_buffer = &server_header_buffer,
+    var req = self.client.request(method, uri, .{
         .headers = .{
             .user_agent = .{ .override = user_agent_string },
             .content_type = .{ .override = "application/json" },
         },
-        .extra_headers = &.{.{
-            .name = "X-APIKEY",
-            .value = self.api_key,
-        }},
+        .extra_headers = &.{
+            .{ .name = "X-APIKEY", .value = self.api_key },
+        },
         .keep_alive = true,
         .redirect_behavior = @enumFromInt(3),
-    }) catch |err| return httpToFetchError(err);
+    }) catch |err| return requestToFetchError(err);
     defer req.deinit();
 
     if (payload) |p| {
@@ -220,111 +232,127 @@ pub fn fetch(
     }
 
     // Redirect loop
-    while (true) {
-        req.send() catch |err| return httpToFetchError(err);
+    var redirect_buffer: [1024]u8 = undefined;
+    var res: http.Client.Response = while (true) {
         if (payload) |p| {
-            json.stringify(
+            var body = req.sendBodyUnflushed(&.{}) catch
+                return streamWriterToFetchError(req.connection.?.stream_writer.err.?);
+            json.Stringify.value(
                 p,
                 stringify_options,
-                req.writer(),
-            ) catch |err| return httpToFetchError(err);
+                &body.writer,
+            ) catch return streamWriterToFetchError(req.connection.?.stream_writer.err.?);
+            body.end() catch return streamWriterToFetchError(req.connection.?.stream_writer.err.?);
+            req.connection.?.flush() catch return streamWriterToFetchError(req.connection.?.stream_writer.err.?);
+        } else {
+            req.sendBodiless() catch
+                return streamWriterToFetchError(req.connection.?.stream_writer.err.?);
         }
-        req.finish() catch |err| return httpToFetchError(err);
-        req.wait() catch |err| switch (err) {
+        break req.receiveHead(&redirect_buffer) catch |err| switch (err) {
             // req.redirect_behavior should prevent an infinite loop
-            http.Client.Request.WaitError.RedirectRequiresResend => continue,
-            else => return httpToFetchError(err),
+            http.Client.Request.ReceiveHeadError.RedirectRequiresResend => continue,
+            http.Client.Request.ReceiveHeadError.ReadFailed,
+            http.Client.Request.ReceiveHeadError.UriMissingHost,
+            http.Client.Request.ReceiveHeadError.UriHostTooLong,
+            http.Client.Request.ReceiveHeadError.HttpHeadersInvalid,
+            http.Client.Request.ReceiveHeadError.HttpRedirectLocationMissing,
+            http.Client.Request.ReceiveHeadError.HttpRedirectLocationOversize,
+            http.Client.Request.ReceiveHeadError.HttpRedirectLocationInvalid,
+            http.Client.Request.ReceiveHeadError.HttpContentEncodingUnsupported,
+            http.Client.Request.ReceiveHeadError.HttpChunkInvalid,
+            http.Client.Request.ReceiveHeadError.HttpChunkTruncated,
+            http.Client.Request.ReceiveHeadError.HttpHeadersOversize,
+            http.Client.Request.ReceiveHeadError.UnsupportedUriScheme,
+            http.Client.Request.ReceiveHeadError.TooManyHttpRedirects,
+            http.Client.Request.ReceiveHeadError.HttpRequestTruncated,
+            http.Client.Request.ReceiveHeadError.HttpConnectionClosing,
+            => return FetchError.UnexpectedFetchFailure,
+            http.Client.Request.ReceiveHeadError.WriteFailed,
+            => return streamWriterToFetchError(req.connection.?.stream_writer.err.?),
+            else => |err2| return requestToFetchError(err2),
         };
-        break;
-    }
+    };
 
-    switch (req.response.status) {
+    switch (res.head.status) {
         .ok => {},
         .forbidden => return FetchError.BadApiKey,
         .not_found => return FetchError.NotFound,
         .too_many_requests => return FetchError.TooManyRequests,
         else => return FetchError.UnexpectedFetchFailure,
     }
+    const headers = datatypes.ResponseHeaders.parse(res.head.bytes) catch
+        return FetchError.UnexpectedFetchFailure;
 
-    var body_reader = json.reader(allocator, req.reader());
+    var transfer_buffer: [64]u8 = undefined;
+    var decompress: http.Decompress = undefined;
+    const decompress_buffer: []u8 = switch (res.head.content_encoding) {
+        .identity => &.{},
+        .zstd => try allocator.alloc(u8, std.compress.zstd.default_window_len),
+        .deflate, .gzip => try allocator.alloc(u8, std.compress.flate.max_window_len),
+        .compress => return FetchError.UnexpectedFetchFailure,
+    };
+    defer allocator.free(decompress_buffer);
+
+    var body_reader = json.Reader.init(allocator, res.readerDecompressing(
+        &transfer_buffer,
+        &decompress,
+        decompress_buffer,
+    ));
     defer body_reader.deinit();
     const parsed = json.parseFromTokenSource(T, allocator, &body_reader, .{
         .allocate = .alloc_always,
         .ignore_unknown_fields = true,
-    }) catch |err| switch (err) {
-        error.OutOfMemory => return FetchError.OutOfMemory,
-        else => return FetchError.InvalidJsonResponse,
+    }) catch |err| return switch (err) {
+        error.OutOfMemory => FetchError.OutOfMemory,
+        error.ReadFailed => FetchError.UnexpectedFetchFailure,
+        else => FetchError.InvalidJsonResponse,
     };
     errdefer parsed.deinit();
 
     return .{
         .arena = parsed.arena,
-        .headers = datatypes.ResponseHeaders.parse(req.response.parser.get()) catch
-            return FetchError.UnexpectedFetchFailure,
+        .headers = headers,
         .value = parsed.value,
     };
 }
 
-fn countJsonLen(value: anytype, options: json.StringifyOptions) u64 {
-    var counter = std.io.countingWriter(std.io.null_writer);
-    json.stringify(value, options, counter.writer()) catch unreachable;
-    return counter.bytes_written;
+fn countJsonLen(value: anytype, options: json.Stringify.Options) u64 {
+    var discarding: std.Io.Writer.Discarding = .init(&.{});
+    json.Stringify.value(value, options, &discarding.writer) catch unreachable;
+    return discarding.count;
 }
 
-const HttpError = http.Client.RequestError ||
-    http.Client.Request.SendError ||
-    http.Client.Request.WriteError ||
-    http.Client.Request.FinishError ||
-    http.Client.Request.WaitError;
-fn httpToFetchError(err: HttpError) FetchError {
-    switch (err) {
-        http.Client.RequestError.InvalidCharacter,
-        http.Client.RequestError.Overflow,
-        http.Client.RequestError.UnsupportedTransferEncoding,
-        http.Client.RequestError.UnsupportedUriScheme, // Checked in `init`
-        http.Client.RequestError.UriMissingHost, // Checked in `init`
-        http.Client.Request.WriteError.MessageTooLong,
-        http.Client.Request.WriteError.NotWriteable,
-        http.Client.Request.FinishError.MessageNotCompleted,
-        http.Client.Request.WaitError.HttpConnectionHeaderUnsupported,
-        http.Client.Request.WaitError.RedirectRequiresResend,
-        => unreachable,
+fn requestToFetchError(err: http.Client.RequestError) FetchError {
+    return switch (err) {
+        http.Client.ConnectTcpError.OutOfMemory,
+        http.Client.ConnectTcpError.ConnectionRefused,
+        http.Client.ConnectTcpError.NetworkUnreachable,
+        http.Client.ConnectTcpError.ConnectionTimedOut,
+        http.Client.ConnectTcpError.ConnectionResetByPeer,
+        http.Client.ConnectTcpError.TemporaryNameServerFailure,
+        http.Client.ConnectTcpError.NameServerFailure,
+        http.Client.ConnectTcpError.UnknownHostName,
+        http.Client.ConnectTcpError.HostLacksNetworkAddresses,
+        http.Client.ConnectTcpError.UnexpectedConnectFailure,
+        http.Client.ConnectTcpError.TlsInitializationFailed,
+        => @errorCast(err),
+        http.Client.RequestError.UnsupportedUriScheme,
+        http.Client.RequestError.UriMissingHost,
+        http.Client.RequestError.UriHostTooLong,
+        => unreachable, // Checked in `init`
+        http.Client.RequestError.CertificateBundleLoadFailure,
+        => FetchError.TlsCertificateBundleLoadFailure,
+    };
+}
 
-        http.Client.RequestError.ConnectionRefused,
-        http.Client.RequestError.ConnectionResetByPeer,
-        http.Client.RequestError.ConnectionTimedOut,
-        http.Client.RequestError.HostLacksNetworkAddresses,
-        http.Client.RequestError.NameServerFailure,
-        http.Client.RequestError.NetworkUnreachable,
-        http.Client.RequestError.OutOfMemory,
-        http.Client.RequestError.TemporaryNameServerFailure,
-        http.Client.RequestError.TlsInitializationFailed,
-        http.Client.RequestError.UnexpectedConnectFailure,
-        http.Client.RequestError.UnknownHostName,
-        => return @errorCast(err),
-        http.Client.RequestError.CertificateBundleLoadFailure => return FetchError.TlsCertificateBundleLoadFailure,
-
-        // There usually isn't anything the user can do about these errors, as
-        // they arise from a bad server response or an unsupported feature in
-        // `http.Client`.
-        http.Client.Request.WriteError.UnexpectedWriteFailure,
-        http.Client.Request.WaitError.CompressionInitializationFailed,
-        http.Client.Request.WaitError.CompressionUnsupported,
-        http.Client.Request.WaitError.EndOfStream,
-        http.Client.Request.WaitError.HttpChunkInvalid,
-        http.Client.Request.WaitError.HttpHeaderContinuationsUnsupported,
-        http.Client.Request.WaitError.HttpHeadersInvalid,
-        http.Client.Request.WaitError.HttpHeadersOversize,
-        http.Client.Request.WaitError.HttpRedirectLocationInvalid,
-        http.Client.Request.WaitError.HttpRedirectLocationMissing,
-        http.Client.Request.WaitError.HttpTransferEncodingUnsupported,
-        http.Client.Request.WaitError.InvalidContentLength,
-        http.Client.Request.WaitError.TlsAlert,
-        http.Client.Request.WaitError.TlsFailure,
-        http.Client.Request.WaitError.TooManyHttpRedirects,
-        http.Client.Request.WaitError.UnexpectedReadFailure,
-        => return FetchError.UnexpectedFetchFailure,
-    }
+fn streamWriterToFetchError(err: std.net.Stream.Writer.Error) FetchError {
+    return switch (err) {
+        std.posix.SendMsgError.NetworkUnreachable,
+        std.posix.SendMsgError.ConnectionRefused,
+        std.posix.SendMsgError.ConnectionResetByPeer,
+        => @errorCast(err),
+        else => FetchError.UnexpectedConnectFailure,
+    };
 }
 
 /// Query options for `live` and `liveWithTotal`.
@@ -953,7 +981,7 @@ const SearchVideosOptionsApi = struct {
     pub const ConditionsFormatter = struct {
         conditions: []const []const u8,
 
-        pub fn jsonStringify(value: @This(), writer: anytype) @TypeOf(writer.*).Error!void {
+        pub fn jsonStringify(value: @This(), writer: *json.Stringify) json.Stringify.Error!void {
             try writer.beginArray();
             for (value.conditions) |cond| {
                 try writer.beginObject();

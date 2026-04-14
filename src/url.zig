@@ -1,53 +1,89 @@
 const std = @import("std");
+const Uri = std.Uri;
+const Writer = std.Io.Writer;
 
-fn isUriUnreserved(c: u8) bool {
+const PercentEncodedWriter = struct {
+    out: *Writer,
+    writer: Writer = .{
+        .buffer = &.{},
+        .vtable = &.{
+            .drain = &drain,
+        },
+    },
+
+    pub fn init(w: *Writer) PercentEncodedWriter {
+        return .{ .out = w };
+    }
+
+    fn drain(w: *Writer, data: []const []const u8, splat: usize) Writer.Error!usize {
+        @branchHint(.likely); // There is no buffer
+        std.debug.assert(w.end == 0);
+
+        const self: *const @This() = @fieldParentPtr("writer", w);
+        for (data[0 .. data.len - 1]) |str| {
+            try std.Uri.Component.percentEncode(self.out, str, isUnreserved);
+        }
+        for (0..splat) |_| {
+            try std.Uri.Component.percentEncode(self.out, data[data.len - 1], isUnreserved);
+        }
+
+        var written: usize = 0;
+        for (data[0 .. data.len - 1]) |str| {
+            written += str.len;
+        }
+        written += data[data.len - 1].len * splat;
+        return written;
+    }
+};
+
+/// Percent encode the formatted string representation of the value.
+///
+/// ```zig
+/// percentEncode(w, "{s}", "hello world");
+/// // Output: hello%20world
+/// ```
+pub fn percentEncode(
+    w: *Writer,
+    comptime fmt: []const u8,
+    value: anytype,
+) Writer.Error!void {
+    var pew: PercentEncodedWriter = .init(w);
+    try pew.writer.print(fmt, .{value});
+    // No need to flush as pew has no buffer
+}
+
+fn isUnreserved(c: u8) bool {
     return switch (c) {
         'A'...'Z', 'a'...'z', '0'...'9', '-', '.', '_', '~' => true,
         else => false,
     };
 }
 
-fn PercentEncodedWriterImpl(comptime Writer: type) type {
-    return struct {
-        pub fn write(context: Writer, bytes: []const u8) Writer.Error!usize {
-            try std.Uri.Component.percentEncode(context, bytes, isUriUnreserved);
-            return bytes.len;
-        }
+fn isUserChar(c: u8) bool {
+    return isUnreserved(c) or isSubLimit(c);
+}
+
+fn isSubLimit(c: u8) bool {
+    return switch (c) {
+        '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=' => true,
+        else => false,
     };
 }
 
-fn percentEncodedWriter(writer: anytype) std.io.GenericWriter(
-    @TypeOf(writer),
-    @TypeOf(writer).Error,
-    PercentEncodedWriterImpl(@TypeOf(writer)).write,
-) {
-    return .{ .context = writer };
+fn isPathChar(c: u8) bool {
+    return isUserChar(c) or c == '/' or c == ':' or c == '@';
 }
 
-/// Percent encode the formatted value. See `holodex.percentEncode` for more details.
-pub fn PercentEncoder(comptime T: type) type {
-    return struct {
-        data: T,
-
-        pub fn format(
-            self: @This(),
-            comptime fmt: []const u8,
-            options: std.fmt.FormatOptions,
-            writer: anytype,
-        ) !void {
-            const percent_encoder = percentEncodedWriter(writer);
-            try std.fmt.formatType(self.data, fmt, options, percent_encoder, 1);
-        }
-    };
-}
-
-/// Percent encode the formatted string representation of the value.
-/// This is a thin wrapper around `std.fmt.formatType`.
-///
-/// ```zig
-/// std.debug.print("{s}", .{ percentEncode("hello world") });
-/// // Output: hello%20world
-/// ```
-pub fn percentEncode(value: anytype) PercentEncoder(@TypeOf(value)) {
-    return .{ .data = value };
+pub fn percentEncodePath(path: Uri.Component) error{UnexpectedCharacter}!Uri.Component {
+    switch (path) {
+        .raw => |raw| {
+            for (raw) |c| {
+                if (!isPathChar(c)) {
+                    return Uri.ParseError.UnexpectedCharacter;
+                }
+            }
+            return .{ .percent_encoded = raw };
+        },
+        .percent_encoded => return path,
+    }
 }

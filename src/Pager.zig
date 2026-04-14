@@ -101,9 +101,9 @@ test Pager {
     const Options = struct {
         mul: T,
         offset: T,
+        limit: T,
     };
-    // Mock api endpoint that returns the multiples of `mul`, 2 at a time, up
-    // to `MAX`.
+    // Mock api endpoint that returns the multiples of `mul`, up to `MAX`.
     const apiFn = (struct {
         const MAX = 14; // Inclusive
 
@@ -111,7 +111,7 @@ test Pager {
             const arena = try allocator.create(std.heap.ArenaAllocator);
             arena.* = std.heap.ArenaAllocator.init(testing.allocator);
 
-            const value = try arena.allocator().alloc(T, 2);
+            const value = try arena.allocator().alloc(T, options.limit);
             for (0..value.len) |i| {
                 value[i] = (options.offset + @as(T, @intCast(i))) * options.mul;
             }
@@ -124,19 +124,22 @@ test Pager {
         }
     }).apiFn;
 
-    var api = Api.init(testing.allocator, .{ .api_key = "Bae's key" }) catch unreachable;
+    var api = Api.init(.{
+        .allocator = testing.allocator,
+        .api_key = "Bae's key",
+    }) catch unreachable;
     defer api.deinit();
     var pager = Pager(T, Options, apiFn){
         .allocator = testing.allocator,
         .api = &api,
-        .options = Options{ .mul = 2, .offset = 3 },
+        .options = Options{ .mul = 2, .offset = 3, .limit = 2 },
     };
     defer pager.deinit();
 
-    var responses = std.ArrayList(T).init(testing.allocator);
-    defer responses.deinit();
+    var responses: std.ArrayList(T) = .empty;
+    defer responses.deinit(testing.allocator);
     while (try pager.next()) |response| {
-        try responses.append(response);
+        try responses.append(testing.allocator, response);
     }
 
     try testing.expectEqualSlices(T, &.{ 6, 8, 10, 12, 14 }, responses.items);

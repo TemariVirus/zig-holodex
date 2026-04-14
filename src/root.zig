@@ -1,10 +1,12 @@
 const std = @import("std");
+
 const zeit = @import("zeit");
 
 pub const Api = @import("Api.zig");
 pub const datatypes = @import("datatypes.zig");
-pub const defaultFormat = @import("defaultFormat.zig").defaultFormat;
+pub const DefaultFormat = @import("defaultFormat.zig").DefaultFormat;
 pub const Pager = @import("Pager.zig").Pager;
+pub const pretty = @import("defaultFormat.zig").pretty;
 
 test {
     std.testing.refAllDecls(@This());
