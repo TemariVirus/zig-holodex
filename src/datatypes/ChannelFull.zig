@@ -52,8 +52,8 @@ crawled_at: ?datatypes.Timestamp = null,
 comments_crawled_at: ?datatypes.Timestamp = null,
 
 const Self = @This();
-pub const format = holodex.DefaultFormat(@This(), struct {}).format;
-pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
+pub const format = holodex.DefaultFormat(@This()).format;
+pub const prettyFormat = holodex.DefaultFormat(@This()).prettyFormat;
 
 /// Type of a channel.
 pub const Type = enum {

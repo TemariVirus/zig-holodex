@@ -13,8 +13,8 @@ rate_limit_remaining: u32,
 rate_limit_reset: datatypes.Timestamp,
 
 const Self = @This();
-pub const format = holodex.DefaultFormat(@This(), struct {}).format;
-pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
+pub const format = holodex.DefaultFormat(@This()).format;
+pub const prettyFormat = holodex.DefaultFormat(@This()).prettyFormat;
 
 pub const ParseError = std.fmt.ParseIntError || error{
     DuplicateHeader,

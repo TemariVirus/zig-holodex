@@ -14,5 +14,5 @@ content: []const u8,
 video: *const datatypes.SearchedVideo,
 
 const Self = @This();
-pub const format = holodex.DefaultFormat(@This(), struct {}).format;
-pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
+pub const format = holodex.DefaultFormat(@This()).format;
+pub const prettyFormat = holodex.DefaultFormat(@This()).prettyFormat;

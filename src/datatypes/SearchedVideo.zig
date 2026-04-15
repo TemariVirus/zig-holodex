@@ -27,8 +27,8 @@ songcount: u32 = 0,
 channel: Channel,
 
 const Self = @This();
-pub const format = holodex.DefaultFormat(@This(), struct {}).format;
-pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
+pub const format = holodex.DefaultFormat(@This()).format;
+pub const prettyFormat = holodex.DefaultFormat(@This()).prettyFormat;
 
 /// Channel information associated with a `SearchedVideo`.
 pub const Channel = struct {
@@ -43,6 +43,6 @@ pub const Channel = struct {
     /// URL to the channel's profile picture.
     photo: []const u8,
 
-    pub const format = holodex.DefaultFormat(@This(), struct {}).format;
-    pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
+    pub const format = holodex.DefaultFormat(@This()).format;
+    pub const prettyFormat = holodex.DefaultFormat(@This()).prettyFormat;
 };

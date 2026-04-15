@@ -50,13 +50,11 @@ mentions: ?[]const datatypes.Vtuber = null,
 timestamp_comments: ?[]const TimestampComment = null,
 
 const Self = @This();
-const F = holodex.DefaultFormat(@This(), struct {
+pub const Overwrites = struct {
     pub fn live_tl_count(
         value: ?std.StringArrayHashMapUnmanaged(u32),
-        comptime _: []const u8,
-        _: std.fmt.FormatOptions,
-        writer: anytype,
-    ) @TypeOf(writer).Error!void {
+        writer: *std.Io.Writer,
+    ) std.Io.Writer.Error!void {
         if (value) |map| {
             try writer.writeAll("{");
             var i: usize = 0;
@@ -75,9 +73,9 @@ const F = holodex.DefaultFormat(@This(), struct {
             try writer.writeAll("null");
         }
     }
-});
-pub const format = F.format;
-pub const prettyFormat = F.prettyFormat;
+};
+pub const format = holodex.DefaultFormat(@This()).format;
+pub const prettyFormat = holodex.DefaultFormat(@This()).prettyFormat;
 
 /// Type of a video.
 pub const Type = enum {
@@ -130,8 +128,8 @@ pub const Channel = struct {
     /// Channel statistics.
     stats: ?datatypes.ChannelFull.Stats,
 
-    pub const format = holodex.DefaultFormat(@This(), struct {}).format;
-    pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
+    pub const format = holodex.DefaultFormat(@This()).format;
+    pub const prettyFormat = holodex.DefaultFormat(@This()).prettyFormat;
 
     pub fn jsonParse(
         allocator: std.mem.Allocator,
@@ -191,8 +189,8 @@ pub const TimestampComment = struct {
     content: []const u8,
 
     const Self = @This();
-    pub const format = holodex.DefaultFormat(@This(), struct {}).format;
-    pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
+    pub const format = holodex.DefaultFormat(@This()).format;
+    pub const prettyFormat = holodex.DefaultFormat(@This()).prettyFormat;
 
     pub fn jsonParse(
         allocator: std.mem.Allocator,

@@ -95,8 +95,8 @@ pub fn Response(comptime T: type) type {
         headers: datatypes.ResponseHeaders,
         value: T,
 
-        pub const format = holodex.DefaultFormat(@This(), struct {}).format;
-        pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
+        pub const format = holodex.DefaultFormat(@This()).format;
+        pub const prettyFormat = holodex.DefaultFormat(@This()).prettyFormat;
 
         pub fn deinit(self: @This()) void {
             const allocator = self.arena.child_allocator;
@@ -112,7 +112,8 @@ pub fn WithTotal(comptime T: type) type {
         total: u64,
         items: T,
 
-        pub const format = holodex.DefaultFormat(@This(), struct {});
+        pub const format = holodex.DefaultFormat(@This());
+        pub const prettyFormat = holodex.DefaultFormat(@This()).prettyFormat;
     };
 }
 

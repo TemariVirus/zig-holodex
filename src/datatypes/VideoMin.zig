@@ -23,8 +23,8 @@ duration: datatypes.Duration,
 available_at: ?datatypes.Timestamp = null,
 
 const Self = @This();
-pub const format = holodex.DefaultFormat(@This(), struct {}).format;
-pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
+pub const format = holodex.DefaultFormat(@This()).format;
+pub const prettyFormat = holodex.DefaultFormat(@This()).prettyFormat;
 
 /// Channel information associated with a `VideoMin`.
 pub const Channel = struct {
@@ -39,6 +39,6 @@ pub const Channel = struct {
     /// URL to the channel's profile picture.
     photo: []const u8,
 
-    pub const format = holodex.DefaultFormat(@This(), struct {}).format;
-    pub const prettyFormat = holodex.DefaultFormat(@This(), struct {}).prettyFormat;
+    pub const format = holodex.DefaultFormat(@This()).format;
+    pub const prettyFormat = holodex.DefaultFormat(@This()).prettyFormat;
 };

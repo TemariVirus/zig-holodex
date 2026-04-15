@@ -37,7 +37,8 @@ const PrettyFormatter = struct {
         try std.json.Stringify.encodeJsonString(str, .{ .escape_unicode = false }, self.out);
     }
 
-    /// Formats and writes the given bytes to `self.out`, returning the number of input bytes written.
+    /// Formats and writes the given bytes to `self.out`, returning the number
+    /// of input bytes written.
     fn write(self: @This(), bytes: []const u8) Writer.Error!usize {
         var written: usize = 0;
         var start: usize = 0;
@@ -90,30 +91,33 @@ const PrettyFormatter = struct {
     }
 };
 
-// Adapted from `std.fmt.formatType`
 fn prettify(
     value: anytype,
     pretty_formatter: *PrettyFormatter,
-    comptime Overwrites: type,
     comptime max_depth: usize,
-    comptime is_root: bool,
+) Writer.Error!void {
+    if (std.meta.hasMethod(@TypeOf(value), "prettyFormat")) {
+        try value.prettyFormat(pretty_formatter, max_depth);
+    } else if (std.meta.hasMethod(@TypeOf(value), "format")) {
+        try value.format(&pretty_formatter.writer);
+    } else {
+        try prettifyInner(value, pretty_formatter, max_depth);
+    }
+}
+
+// Adapted from `std.fmt.formatType`
+fn prettifyInner(
+    value: anytype,
+    pretty_formatter: *PrettyFormatter,
+    comptime max_depth: usize,
 ) Writer.Error!void {
     const T = @TypeOf(value);
     const writer = &pretty_formatter.writer;
 
-    if (!is_root) {
-        if (std.meta.hasMethod(T, "prettyFormat")) {
-            return value.prettyFormat(pretty_formatter, max_depth);
-        }
-        if (std.meta.hasMethod(T, "format")) {
-            return value.format(writer);
-        }
-    }
-
     switch (@typeInfo(T)) {
         .optional => {
             if (value) |payload| {
-                return prettify(payload, pretty_formatter, Overwrites, max_depth, false);
+                return prettifyInner(payload, pretty_formatter, max_depth);
             } else {
                 return writer.writeAll("null");
             }
@@ -129,13 +133,13 @@ fn prettify(
                 try writer.writeAll(" = ");
                 inline for (info.fields) |u_field| {
                     if (value == @field(UnionTagType, u_field.name)) {
-                        try prettify(
-                            @field(value, u_field.name),
-                            pretty_formatter,
-                            struct {},
-                            max_depth - 1,
-                            false,
-                        );
+                        // Overwrite field formatting if it exists
+                        if (@hasDecl(T, "Overwrites") and std.meta.hasMethod(T.Overwrites, u_field.name)) {
+                            const formatFn = @field(T.Overwrites, u_field.name);
+                            try formatFn(@field(value, u_field.name), writer);
+                        } else {
+                            try prettify(@field(value, u_field.name), pretty_formatter, max_depth - 1);
+                        }
                     }
                 }
                 try writer.writeAll(" }");
@@ -159,9 +163,7 @@ fn prettify(
                     try prettify(
                         @field(value, f.name),
                         pretty_formatter,
-                        struct {},
                         max_depth - 1,
-                        false,
                     );
                 }
                 return writer.writeAll(" }");
@@ -183,11 +185,11 @@ fn prettify(
                 try writer.writeAll(f.name);
                 try writer.writeAll(" = ");
                 // Overwrite field formatting if it exists
-                if (std.meta.hasMethod(Overwrites, f.name)) {
-                    const formatFn = @field(Overwrites, f.name);
-                    try formatFn(@field(value, f.name), pretty_formatter.anyWriter());
+                if (@hasDecl(T, "Overwrites") and std.meta.hasMethod(T.Overwrites, f.name)) {
+                    const formatFn = @field(T.Overwrites, f.name);
+                    try formatFn(@field(value, f.name), writer);
                 } else {
-                    try prettify(@field(value, f.name), pretty_formatter, struct {}, max_depth - 1, false);
+                    try prettify(@field(value, f.name), pretty_formatter, max_depth - 1);
                 }
             }
             pretty_formatter.unIndent();
@@ -197,7 +199,7 @@ fn prettify(
         .pointer => |ptr_info| switch (ptr_info.size) {
             .one => switch (@typeInfo(ptr_info.child)) {
                 .array, .@"enum", .@"union", .@"struct" => {
-                    return prettify(value.*, pretty_formatter, Overwrites, max_depth, false);
+                    return prettify(value.*, pretty_formatter, max_depth);
                 },
                 else => return std.fmt.format(
                     writer,
@@ -207,10 +209,7 @@ fn prettify(
             },
             .many, .c => {
                 if (ptr_info.sentinel()) |_| {
-                    return prettify(mem.span(value), pretty_formatter, Overwrites, max_depth, false);
-                }
-                if (ptr_info.child == u8) {
-                    return pretty_formatter.writeString(mem.span(value));
+                    return prettifyInner(mem.span(value), pretty_formatter, max_depth);
                 }
                 @compileError("Non-sentinel terminated pointer types must use '*' format string");
             },
@@ -225,7 +224,7 @@ fn prettify(
                 pretty_formatter.indent();
                 try pretty_formatter.nextField();
                 for (value, 0..) |elem, i| {
-                    try prettify(elem, pretty_formatter, Overwrites, max_depth - 1, false);
+                    try prettify(elem, pretty_formatter, max_depth - 1);
                     if (i != value.len - 1) {
                         try writer.writeByte(',');
                         try pretty_formatter.nextField();
@@ -236,39 +235,39 @@ fn prettify(
                 try writer.writeByte('}');
             },
         },
-        .array => |_| return prettify(&value, pretty_formatter, Overwrites, max_depth, false),
-        else => return writer.printValue("", .{}, value, max_depth),
+        .array => |_| return prettifyInner(&value, pretty_formatter, max_depth),
+        else => {
+            return if (std.meta.hasMethod(@TypeOf(value), "prettyFormat"))
+                value.prettyFormat(pretty_formatter, max_depth - 1)
+            else if (std.meta.hasMethod(@TypeOf(value), "format"))
+                value.format(&pretty_formatter.writer)
+            else
+                writer.printValue("", .{}, value, max_depth);
+        },
     }
 }
 
 /// Create a default format function for a type.
 ///
-/// The `Overwrites` type is a struct that contains methods of the form:
+/// By adding an `Overwrites` struct decl that contains methods of the form:
 /// ```zig
 /// pub fn fieldName(
 ///     value: @TypeOf(T.fieldName),
 ///     writer: *std.Io.Writer,
-/// ) @TypeOf(writer).Error!void {
+/// ) std.Io.Writer.Error!void {
 ///     // custom formatting logic for `T.fieldName`
 /// }
 /// ```
 /// When `fieldName` matches the name of a field in `T`, the custom formatting
-/// function will be called instead of the default formatting function. This
-/// behaviour carries through optionals, pointers, slices, and arrays, but not
-/// through unions or structs.
-pub fn DefaultFormat(
-    comptime T: type,
-    comptime Overwrites: type,
-) type {
+/// function will be called instead of the default formatting function.
+pub fn DefaultFormat(comptime T: type) type {
     return struct {
         pub fn format(value: T, writer: *Writer) Writer.Error!void {
             var pretty_formatter: PrettyFormatter = .init(writer);
-            return prettify(
+            return prettifyInner(
                 value,
                 &pretty_formatter,
-                Overwrites,
                 std.options.fmt_max_depth,
-                true,
             );
         }
 
@@ -277,12 +276,10 @@ pub fn DefaultFormat(
             pretty_formatter: *PrettyFormatter,
             comptime max_depth: usize,
         ) Writer.Error!void {
-            return prettify(
+            return prettifyInner(
                 value,
                 pretty_formatter,
-                Overwrites,
                 max_depth,
-                true,
             );
         }
     };
@@ -295,7 +292,7 @@ pub fn DefaultFormat(
 /// ```
 pub fn pretty(value: anytype) std.fmt.Alt(
     @TypeOf(value),
-    DefaultFormat(@TypeOf(value), struct {}).format,
+    DefaultFormat(@TypeOf(value)).format,
 ) {
     return .{ .data = value };
 }
