@@ -493,6 +493,21 @@ pub fn live(
     return self.liveAssumeLimit(allocator, options);
 }
 
+fn liveWithTotalAssumeLimit(
+    self: *Self,
+    allocator: Allocator,
+    options: LiveOptions,
+) FetchError!Response(WithTotal([]datatypes.VideoFull)) {
+    return self.fetch(
+        WithTotal([]datatypes.VideoFull),
+        allocator,
+        .GET,
+        "/live",
+        LiveOptionsApi.fromLib(options, true),
+        null,
+    );
+}
+
 /// The same as `live`, but includes the total number of videos matching the
 /// given options.
 ///
@@ -504,14 +519,7 @@ pub fn liveWithTotal(
     options: LiveOptions,
 ) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.VideoFull)) {
     if (options.limit <= 0 or options.limit > LiveOptions.max_limit) return error.InvalidLimit;
-    return self.fetch(
-        WithTotal([]datatypes.VideoFull),
-        allocator,
-        .GET,
-        "/live",
-        LiveOptionsApi.fromLib(options, true),
-        null,
-    );
+    return self.liveWithTotalAssumeLimit(allocator, options);
 }
 
 /// Create a pager that iterates over the results of `live`.
@@ -523,9 +531,9 @@ pub fn pageLive(
     self: *Self,
     allocator: Allocator,
     options: LiveOptions,
-) error{InvalidLimit}!Pager(datatypes.VideoFull, LiveOptions, liveAssumeLimit) {
+) error{InvalidLimit}!Pager(datatypes.VideoFull, LiveOptions, liveWithTotalAssumeLimit) {
     if (options.limit <= 0 or options.limit > LiveOptions.max_limit) return error.InvalidLimit;
-    return Pager(datatypes.VideoFull, LiveOptions, liveAssumeLimit){
+    return .{
         .allocator = allocator,
         .api = self,
         .options = options,
@@ -651,6 +659,21 @@ pub fn videos(
     return self.videosAssumeLimit(allocator, options);
 }
 
+fn videosWithTotalAssumeLimit(
+    self: *Self,
+    allocator: Allocator,
+    options: VideosOptions,
+) FetchError!Response(WithTotal([]datatypes.VideoFull)) {
+    return self.fetch(
+        WithTotal([]datatypes.VideoFull),
+        allocator,
+        .GET,
+        "/videos",
+        VideosOptionsApi.fromLib(options, true),
+        null,
+    );
+}
+
 /// The same as `videos`, but includes the total number of videos matching the
 /// given options.
 ///
@@ -662,14 +685,7 @@ pub fn videosWithTotal(
     options: VideosOptions,
 ) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.VideoFull)) {
     if (options.limit <= 0 or options.limit > VideosOptions.max_limit) return error.InvalidLimit;
-    return self.fetch(
-        WithTotal([]datatypes.VideoFull),
-        allocator,
-        .GET,
-        "/videos",
-        VideosOptionsApi.fromLib(options, true),
-        null,
-    );
+    return self.videosWithTotalAssumeLimit(allocator, options);
 }
 
 /// Create a pager that iterates over the results of `videos`.
@@ -681,9 +697,9 @@ pub fn pageVideos(
     self: *Self,
     allocator: Allocator,
     options: VideosOptions,
-) error{InvalidLimit}!Pager(datatypes.VideoFull, VideosOptions, videosAssumeLimit) {
+) error{InvalidLimit}!Pager(datatypes.VideoFull, VideosOptions, videosWithTotalAssumeLimit) {
     if (options.limit <= 0 or options.limit > VideosOptions.max_limit) return error.InvalidLimit;
-    return Pager(datatypes.VideoFull, VideosOptions, videosAssumeLimit){
+    return .{
         .allocator = allocator,
         .api = self,
         .options = options,
@@ -795,18 +811,11 @@ pub fn channelVideos(
     return self.channelVideosAssumeLimit(allocator, options);
 }
 
-/// The same as `channelVideos`, but includes the total number of videos matching
-/// the given options.
-///
-/// - Use `channelVideos` to get the videos without a total.
-/// - Use `pageChannelVidoes` to page through the results without a total.
-pub fn channelVideosWithTotal(
+fn channelVideosWithTotalAssumeLimit(
     self: *Self,
     allocator: Allocator,
     options: ChannelVideosOptions,
-) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.VideoFull)) {
-    if (options.limit <= 0 or options.limit > ChannelVideosOptions.max_limit) return error.InvalidLimit;
-
+) FetchError!Response(WithTotal([]datatypes.VideoFull)) {
     const scratch = self.client.allocator;
     const path = try fmt.allocPrint(scratch, "/channels/{s}/{s}", .{
         options.channel_id,
@@ -823,6 +832,20 @@ pub fn channelVideosWithTotal(
     );
 }
 
+/// The same as `channelVideos`, but includes the total number of videos matching
+/// the given options.
+///
+/// - Use `channelVideos` to get the videos without a total.
+/// - Use `pageChannelVidoes` to page through the results without a total.
+pub fn channelVideosWithTotal(
+    self: *Self,
+    allocator: Allocator,
+    options: ChannelVideosOptions,
+) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.VideoFull)) {
+    if (options.limit <= 0 or options.limit > ChannelVideosOptions.max_limit) return error.InvalidLimit;
+    return self.channelVideosWithTotalAssumeLimit(allocator, options);
+}
+
 /// Create a pager that iterates over the results of `channelVideos`.
 /// `deinit` must be called on the returned pager to free the memory used by it.
 ///
@@ -832,9 +855,9 @@ pub fn pageChannelVideos(
     self: *Self,
     allocator: Allocator,
     options: ChannelVideosOptions,
-) error{InvalidLimit}!Pager(datatypes.VideoFull, ChannelVideosOptions, channelVideosAssumeLimit) {
+) error{InvalidLimit}!Pager(datatypes.VideoFull, ChannelVideosOptions, channelVideosWithTotalAssumeLimit) {
     if (options.limit <= 0 or options.limit > ChannelVideosOptions.max_limit) return error.InvalidLimit;
-    return Pager(datatypes.VideoFull, ChannelVideosOptions, channelVideosAssumeLimit){
+    return .{
         .allocator = allocator,
         .api = self,
         .options = options,
@@ -951,15 +974,42 @@ fn listChannelsAssumeLimit(
     );
 }
 
+fn listChannelsWithTotalAssumeLimit(
+    self: *Self,
+    allocator: Allocator,
+    options: ListChannelsOptions,
+) FetchError!Response(WithTotal([]datatypes.Channel)) {
+    const parsed = try self.fetch(
+        []datatypes.Channel,
+        allocator,
+        .GET,
+        "/channels",
+        options,
+        null,
+    );
+    errdefer parsed.deinit();
+    return .{
+        .arena = parsed.arena,
+        .headers = parsed.headers,
+        .value = .{
+            .items = parsed.value,
+            .total = undefined,
+        },
+    };
+}
+
 /// Create a pager that iterates over the results of `listChannels`.
 /// `deinit` must be called on the returned pager to free the memory used by it.
+///
+/// This endpoint does not report the total amount of items, and it is illegal
+/// to call `.total()` on the returned pager.
 pub fn pageChannels(
     self: *Self,
     allocator: Allocator,
     options: ListChannelsOptions,
-) error{InvalidLimit}!Pager(datatypes.Channel, ListChannelsOptions, listChannelsAssumeLimit) {
+) error{InvalidLimit}!Pager(datatypes.Channel, ListChannelsOptions, listChannelsWithTotalAssumeLimit) {
     if (options.limit <= 0 or options.limit > ListChannelsOptions.max_limit) return error.InvalidLimit;
-    return Pager(datatypes.Channel, ListChannelsOptions, listChannelsAssumeLimit){
+    return .{
         .allocator = allocator,
         .api = self,
         .options = options,
@@ -1070,6 +1120,21 @@ pub fn searchVideos(
     return self.searchVideosAssumeLimit(allocator, options);
 }
 
+fn searchVideosWithTotalAssumeLimit(
+    self: *Self,
+    allocator: Allocator,
+    options: SearchVideosOptions,
+) FetchError!Response(WithTotal([]datatypes.Video)) {
+    return self.fetch(
+        WithTotal([]datatypes.Video),
+        allocator,
+        .POST,
+        "/search/videoSearch",
+        empty_query,
+        @as(?SearchVideosOptionsApi, SearchVideosOptionsApi.fromLib(options, true)),
+    );
+}
+
 /// The same as `searchVideos`, but includes the total number of videos
 /// matching the given options.
 ///
@@ -1081,14 +1146,7 @@ pub fn searchVideosWithTotal(
     options: SearchVideosOptions,
 ) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.Video)) {
     if (options.limit <= 0 or options.limit > SearchVideosOptions.max_limit) return error.InvalidLimit;
-    return self.fetch(
-        WithTotal([]datatypes.Video),
-        allocator,
-        .POST,
-        "/search/videoSearch",
-        empty_query,
-        @as(?SearchVideosOptionsApi, SearchVideosOptionsApi.fromLib(options, true)),
-    );
+    return self.searchVideosWithTotalAssumeLimit(allocator, options);
 }
 
 /// Create a pager that iterates over the results of `searchVideos`.
@@ -1100,9 +1158,9 @@ pub fn pageSearchVideos(
     self: *Self,
     allocator: Allocator,
     options: SearchVideosOptions,
-) error{InvalidLimit}!Pager(datatypes.Video, SearchVideosOptions, searchVideosAssumeLimit) {
+) error{InvalidLimit}!Pager(datatypes.Video, SearchVideosOptions, searchVideosWithTotalAssumeLimit) {
     if (options.limit <= 0 or options.limit > SearchVideosOptions.max_limit) return error.InvalidLimit;
-    return Pager(datatypes.Video, SearchVideosOptions, searchVideosAssumeLimit){
+    return .{
         .allocator = allocator,
         .api = self,
         .options = options,
@@ -1199,18 +1257,11 @@ pub fn searchComments(
     return self.searchCommentsAssumeLimit(allocator, options);
 }
 
-/// The same as `searchComments`, but includes the total number of comments
-/// matching the given options.
-///
-/// - Use `searchComments` to get the comments without a total.
-/// - Use `pageSearchComments` to page through the results without a total.
-pub fn searchCommentsWithTotal(
+fn searchCommentsWithTotalAssumeLimit(
     self: *Self,
     allocator: Allocator,
     options: SearchCommentsOptions,
-) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.Comment)) {
-    if (options.limit <= 0 or options.limit > SearchCommentsOptions.max_limit) return error.InvalidLimit;
-
+) FetchError!Response(WithTotal([]datatypes.Comment)) {
     const parsed = try self.fetch(
         WithTotal(SearchCommentsResponse),
         allocator,
@@ -1230,6 +1281,20 @@ pub fn searchCommentsWithTotal(
     };
 }
 
+/// The same as `searchComments`, but includes the total number of comments
+/// matching the given options.
+///
+/// - Use `searchComments` to get the comments without a total.
+/// - Use `pageSearchComments` to page through the results without a total.
+pub fn searchCommentsWithTotal(
+    self: *Self,
+    allocator: Allocator,
+    options: SearchCommentsOptions,
+) (FetchError || error{InvalidLimit})!Response(WithTotal([]datatypes.Comment)) {
+    if (options.limit <= 0 or options.limit > SearchCommentsOptions.max_limit) return error.InvalidLimit;
+    return self.searchCommentsWithTotalAssumeLimit(allocator, options);
+}
+
 /// Create a pager that iterates over the results of `searchComments`.
 /// `deinit` must be called on the returned pager to free the memory used by it.
 ///
@@ -1239,9 +1304,9 @@ pub fn pageSearchComments(
     self: *Self,
     allocator: Allocator,
     options: SearchCommentsOptions,
-) error{InvalidLimit}!Pager(datatypes.Comment, SearchCommentsOptions, searchCommentsAssumeLimit) {
+) error{InvalidLimit}!Pager(datatypes.Comment, SearchCommentsOptions, searchCommentsWithTotalAssumeLimit) {
     if (options.limit <= 0 or options.limit > SearchCommentsOptions.max_limit) return error.InvalidLimit;
-    return Pager(datatypes.Comment, SearchCommentsOptions, searchCommentsAssumeLimit){
+    return .{
         .allocator = allocator,
         .api = self,
         .options = options,

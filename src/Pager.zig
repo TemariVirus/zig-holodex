@@ -15,13 +15,13 @@ const datatypes = @import("root.zig").datatypes;
 pub fn Pager(
     comptime T: type,
     comptime Options: type,
-    comptime apiFn: fn (*Api, Allocator, Options) Api.FetchError!Api.Response([]T),
+    comptime apiFn: fn (*Api, Allocator, Options) Api.FetchError!Api.Response(Api.WithTotal([]T)),
 ) type {
     return struct {
         allocator: Allocator,
         api: *Api,
         options: Options,
-        responses: ?Api.Response([]T) = null,
+        responses: ?Api.Response(Api.WithTotal([]T)) = null,
         responses_index: usize = 0,
 
         pub fn deinit(self: *@This()) void {
@@ -42,7 +42,7 @@ pub fn Pager(
 
         /// Return the index of the current item, starting from 0.
         pub fn currentIndex(self: @This()) usize {
-            const page_len = if (self.responses) |res| res.value.len else 0;
+            const page_len = if (self.responses) |res| res.value.items.len else 0;
             return self.options.offset - page_len + self.responses_index -| 1;
         }
 
@@ -52,17 +52,27 @@ pub fn Pager(
             return @divExact(self.options.offset, self.options.limit) -| 1;
         }
 
+        /// Return the total number of items that will be paged. This value may
+        /// change as a new page is fetched. The returned value is guaranteed
+        /// to be non-null if `next` was called at least once.
+        pub fn total(self: @This()) ?usize {
+            if (self.responses) |res| {
+                return res.value.total;
+            }
+            return null;
+        }
+
         /// Return the next result, or `null` if there are no more results.
         /// The caller does not own the memory of the returned value.
         /// `deinit` must be called to free the memory used by the pager.
         pub fn next(self: *@This()) Api.FetchError!?T {
             try self.tryNextPage();
-            if (self.responses.?.value.len == 0) {
+            if (self.responses.?.value.items.len == 0) {
                 return null;
             }
 
             defer self.responses_index += 1;
-            return self.responses.?.value[self.responses_index];
+            return self.responses.?.value.items[self.responses_index];
         }
 
         /// If at the end of the current page and there are more pages, fetch
@@ -71,12 +81,12 @@ pub fn Pager(
             // Return if we're not at the end of the current page or there are
             // no more pages.
             if (self.responses) |*responses| {
-                if (self.responses_index < responses.value.len) {
+                if (self.responses_index < responses.value.items.len) {
                     return;
                 }
                 // This is the end of the last page
-                if (responses.value.len < self.options.limit) {
-                    responses.value = &.{};
+                if (responses.value.items.len < self.options.limit) {
+                    responses.value.items = &.{};
                     return;
                 }
             }
@@ -91,7 +101,7 @@ pub fn Pager(
             }
             self.responses = new_responses;
             self.responses_index = 0;
-            self.options.offset += @intCast(new_responses.value.len);
+            self.options.offset += @intCast(new_responses.value.items.len);
         }
     };
 }
@@ -107,7 +117,7 @@ test Pager {
     const apiFn = (struct {
         const MAX = 14; // Inclusive
 
-        pub fn apiFn(_: *Api, allocator: Allocator, options: Options) !Api.Response([]T) {
+        pub fn apiFn(_: *Api, allocator: Allocator, options: Options) !Api.Response(Api.WithTotal([]T)) {
             const arena = try allocator.create(std.heap.ArenaAllocator);
             arena.* = std.heap.ArenaAllocator.init(testing.allocator);
 
@@ -119,7 +129,10 @@ test Pager {
             return .{
                 .arena = arena,
                 .headers = undefined,
-                .value = value[0..@min(value.len, (MAX / options.mul) + 1 - options.offset)],
+                .value = .{
+                    .total = (MAX / options.mul) + 1,
+                    .items = value[0..@min(value.len, (MAX / options.mul) + 1 - options.offset)],
+                },
             };
         }
     }).apiFn;
