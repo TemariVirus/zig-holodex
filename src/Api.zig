@@ -440,7 +440,7 @@ const LiveOptionsApi = struct {
     order: SortOrder,
     offset: u64,
     limit: u64,
-    paginated: ?bool,
+    paginated: ?u1,
 
     pub fn fromLib(options: LiveOptions, paginated: bool) LiveOptionsApi {
         return LiveOptionsApi{
@@ -458,7 +458,7 @@ const LiveOptionsApi = struct {
             .order = options.order,
             .offset = options.offset,
             .limit = options.limit,
-            .paginated = if (paginated) true else null,
+            .paginated = if (paginated) 1 else null,
         };
     }
 };
@@ -594,7 +594,7 @@ const VideosOptionsApi = struct {
     order: SortOrder,
     limit: usize,
     offset: u64,
-    paginated: ?bool,
+    paginated: ?u1,
     max_upcoming_hours: ?u64,
     from: ?datatypes.Timestamp,
     to: ?datatypes.Timestamp,
@@ -614,7 +614,7 @@ const VideosOptionsApi = struct {
             .order = options.order,
             .limit = options.limit,
             .offset = options.offset,
-            .paginated = if (paginated) true else null,
+            .paginated = if (paginated) 1 else null,
             .max_upcoming_hours = options.max_upcoming_hours,
             .from = options.from,
             .to = options.to,
@@ -745,7 +745,7 @@ const ChannelVideosOptionsApi = struct {
     include: ?VideoIncludes,
     limit: usize,
     offset: u64,
-    paginated: ?bool,
+    paginated: ?u1,
 
     pub fn fromLib(options: ChannelVideosOptions, paginated: bool) ChannelVideosOptionsApi {
         return ChannelVideosOptionsApi{
@@ -755,7 +755,7 @@ const ChannelVideosOptionsApi = struct {
             .include = if (options.includes == VideoIncludes.none) null else options.includes,
             .limit = options.limit,
             .offset = options.offset,
-            .paginated = if (paginated) true else null,
+            .paginated = if (paginated) 1 else null,
         };
     }
 };
