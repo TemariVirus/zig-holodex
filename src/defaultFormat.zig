@@ -201,8 +201,7 @@ fn prettifyInner(
                 .array, .@"enum", .@"union", .@"struct" => {
                     return prettify(value.*, pretty_formatter, max_depth);
                 },
-                else => return std.fmt.format(
-                    writer,
+                else => return writer.print(
                     "{s}@{x}",
                     .{ @typeName(ptr_info.child), @intFromPtr(value) },
                 ),
@@ -235,7 +234,7 @@ fn prettifyInner(
                 try writer.writeByte('}');
             },
         },
-        .array => |_| return prettifyInner(&value, pretty_formatter, max_depth),
+        .array => return prettifyInner(&value, pretty_formatter, max_depth),
         else => {
             return if (std.meta.hasMethod(@TypeOf(value), "prettyFormat"))
                 value.prettyFormat(pretty_formatter, max_depth - 1)

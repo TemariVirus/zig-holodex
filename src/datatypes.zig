@@ -71,10 +71,10 @@ pub const Duration = enum(u32) {
 
     pub fn format(self: Duration, writer: *Writer) Writer.Error!void {
         if (self.seconds() == 0) {
-            // Using `writer.printDuration` will print `0ns` instead
+            // Using `Duration.format` will print `0ns` instead
             try writer.writeAll("0s");
         } else {
-            try writer.printDuration(@as(u64, self.seconds()) * std.time.ns_per_s, .{});
+            try std.Io.Duration.format(.fromSeconds(self.seconds()), writer);
         }
     }
 
@@ -103,7 +103,7 @@ pub const Timestamp = enum(i64) {
     }
 
     pub fn toInstant(self: Timestamp) zeit.Instant {
-        return zeit.instant(.{
+        return zeit.instant(.failing, .{
             .source = .{ .unix_timestamp = self.seconds() },
             .timezone = &zeit.utc,
         }) catch unreachable;
@@ -115,7 +115,7 @@ pub const Timestamp = enum(i64) {
 
     /// Parse a timestamp in the ISO 8601 format
     pub fn parseISO(iso8601: []const u8) ParseError!Timestamp {
-        const instant = zeit.instant(.{
+        const instant = zeit.instant(.failing, .{
             .source = .{ .iso8601 = iso8601 },
         }) catch return ParseError.InvalidTimestamp;
         return fromInstant(instant);

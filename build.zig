@@ -38,7 +38,7 @@ fn libVersion(b: *std.Build) []const u8 {
     const BuildZigZon = struct {
         version: []const u8,
     };
-    const build_zig_zon = std.zon.parse.fromSlice(
+    const build_zig_zon = std.zon.parse.fromSliceAlloc(
         BuildZigZon,
         b.allocator,
         @embedFile("build.zig.zon"),

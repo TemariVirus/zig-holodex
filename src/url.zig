@@ -79,7 +79,7 @@ pub fn percentEncodePath(path: Uri.Component) error{UnexpectedCharacter}!Uri.Com
         .raw => |raw| {
             for (raw) |c| {
                 if (!isPathChar(c)) {
-                    return Uri.ParseError.UnexpectedCharacter;
+                    return error.UnexpectedCharacter;
                 }
             }
             return .{ .percent_encoded = raw };

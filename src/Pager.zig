@@ -6,7 +6,7 @@ const testing = std.testing;
 const Api = @import("root.zig").Api;
 const datatypes = @import("root.zig").datatypes;
 
-/// A pager that iterates over the results of an endpoint.
+/// A pager that iterates over the results of an endpoint. Not thread-safe.
 /// `Options` must be a struct that contains:
 ///   - an `offset` field of an integer type.
 ///   - a `limit` field of an integer type, that has a value greater than 0.
@@ -139,6 +139,7 @@ test Pager {
 
     var api = Api.init(.{
         .allocator = testing.allocator,
+        .io = testing.io,
         .api_key = "Bae's key",
     }) catch unreachable;
     defer api.deinit();
