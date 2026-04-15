@@ -54,7 +54,7 @@ pub fn percentEncode(
 
 fn isUnreserved(c: u8) bool {
     return switch (c) {
-        'A'...'Z', 'a'...'z', '0'...'9', '-', '.', '_', '~' => true,
+        'A'...'Z', 'a'...'z', '0'...'9', '-', ',', '.', '_', '~' => true,
         else => false,
     };
 }

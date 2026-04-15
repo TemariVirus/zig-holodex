@@ -116,6 +116,7 @@ test formatQuery {
         @"enum": enum { @"69%", sleepingTogether },
         @"日本語🙃": ?[]const u8,
         list_of_enums: ?[]const enum { a, b, c } = null,
+        includes: ?@import("Api.zig").VideoIncludes,
     };
 
     try testing.expectFmt(
@@ -129,11 +130,12 @@ test formatQuery {
             .@"enum" = .@"69%",
             .@"日本語🙃" = null,
             .list_of_enums = &.{ .a, .b },
+            .includes = null,
         })},
     );
 
     try testing.expectFmt(
-        "holodex.net/ya/goo?null=Hopes%20and%20dreams&int=0&str=hololive%20is%20an%20idol%20group%20like%20AKB48&list=&enum=sleepingTogether&%E6%97%A5%E6%9C%AC%E8%AA%9E%F0%9F%99%83=%E9%87%8F%E5%AD%90%E3%83%81%E3%82%AD%E3%83%B3%E3%82%B9%E3%83%BC%E3%83%97%E3%82%B0%E3%83%A9%E3%82%B9%E3%83%93%E3%83%83%E3%82%B0%E3%83%81%E3%83%A5%E3%83%B3%E3%82%B0%E3%82%B9%E3%80%80%F0%9F%8F%83%F0%9F%92%A8%F0%9F%90%89",
+        "holodex.net/ya/goo?null=Hopes%20and%20dreams&int=0&str=hololive%20is%20an%20idol%20group%20like%20AKB48&list=&enum=sleepingTogether&%E6%97%A5%E6%9C%AC%E8%AA%9E%F0%9F%99%83=%E9%87%8F%E5%AD%90%E3%83%81%E3%82%AD%E3%83%B3%E3%82%B9%E3%83%BC%E3%83%97%E3%82%B0%E3%83%A9%E3%82%B9%E3%83%93%E3%83%83%E3%82%B0%E3%83%81%E3%83%A5%E3%83%B3%E3%82%B0%E3%82%B9%E3%80%80%F0%9F%8F%83%F0%9F%92%A8%F0%9F%90%89&includes=clips,channel_stats,songs",
         "holodex.net/ya/goo?{f}",
         .{formatQuery(&TestQuery{
             .null = "Hopes and dreams",
@@ -142,6 +144,11 @@ test formatQuery {
             .list = &.{},
             .@"enum" = .sleepingTogether,
             .@"日本語🙃" = "量子チキンスープグラスビッグチュングス　🏃💨🐉",
+            .includes = .{
+                .songs = true,
+                .channel_stats = true,
+                .clips = true,
+            },
         })},
     );
 }

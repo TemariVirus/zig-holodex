@@ -63,16 +63,43 @@ pub const FetchError = http.Client.ConnectTcpError || error{
 };
 
 /// Extra information to include for videos.
-pub const VideoIncludes = enum {
-    clips,
-    refers,
-    sources,
-    simulcasts,
-    mentions,
-    description,
-    live_info,
-    channel_stats,
-    songs,
+pub const VideoIncludes = packed struct {
+    clips: bool = false,
+    refers: bool = false,
+    sources: bool = false,
+    simulcasts: bool = false,
+    mentions: bool = false,
+    description: bool = false,
+    live_info: bool = false,
+    channel_stats: bool = false,
+    songs: bool = false,
+
+    pub const none: VideoIncludes = .{};
+    pub const all: VideoIncludes = .{
+        .clips = true,
+        .refers = true,
+        .sources = true,
+        .simulcasts = true,
+        .mentions = true,
+        .description = true,
+        .live_info = true,
+        .channel_stats = true,
+        .songs = true,
+    };
+
+    pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        var first = true;
+        inline for (@typeInfo(@This()).@"struct".fields) |field| {
+            if (@field(self, field.name)) {
+                if (first) {
+                    first = false;
+                } else {
+                    try writer.writeByte(',');
+                }
+                try writer.writeAll(field.name);
+            }
+        }
+    }
 };
 
 /// The order to sort results in.
@@ -381,9 +408,9 @@ pub const LiveOptions = struct {
     /// Only include videos mentioning this channel, and are not posted on the
     /// channel itself. Leave null to disable this filter.
     mentioned_channel_id: ?[]const u8 = null,
-    /// List of additional information to include for each video. `live_info`
-    /// is always included, regardless of this field.
-    includes: []const VideoIncludes = &.{},
+    /// Additional information to include for each video. `live_info` is always
+    /// included, regardless of this field.
+    includes: VideoIncludes = .{},
     /// Column to sort on.
     sort: meta.FieldEnum(datatypes.VideoFull.Json) = .available_at,
     /// Sort order.
@@ -408,7 +435,7 @@ const LiveOptionsApi = struct {
     max_upcoming_hours: u64,
     org: ?datatypes.Organization,
     mentioned_channel_id: ?[]const u8,
-    include: ?[]const VideoIncludes,
+    include: ?VideoIncludes,
     sort: meta.FieldEnum(datatypes.VideoFull.Json),
     order: SortOrder,
     offset: u64,
@@ -426,7 +453,7 @@ const LiveOptionsApi = struct {
             .max_upcoming_hours = options.max_upcoming_hours,
             .org = options.org,
             .mentioned_channel_id = options.mentioned_channel_id,
-            .include = if (options.includes.len == 0) null else options.includes,
+            .include = if (options.includes == VideoIncludes.none) null else options.includes,
             .sort = options.sort,
             .order = options.order,
             .offset = options.offset,
@@ -537,8 +564,8 @@ pub const VideosOptions = struct {
     /// Only include videos mentioning this channel, and are not posted on the
     /// channel itself. Leave null to disable this filter.
     mentioned_channel_id: ?[]const u8 = null,
-    /// List of additional information to include for each video.
-    includes: []const VideoIncludes = &.{},
+    /// Additional information to include for each video.
+    includes: VideoIncludes = .{},
     /// Column to sort on.
     sort: meta.FieldEnum(datatypes.VideoFull.Json) = .available_at,
     /// Sort order.
@@ -560,7 +587,7 @@ const VideosOptionsApi = struct {
     lang: ?[]const datatypes.Language,
     type: ?[]const datatypes.VideoFull.Type,
     topic: ?datatypes.Topic,
-    include: ?[]const VideoIncludes,
+    include: ?VideoIncludes,
     org: ?datatypes.Organization,
     mentioned_channel_id: ?[]const u8,
     sort: meta.FieldEnum(datatypes.VideoFull.Json),
@@ -580,7 +607,7 @@ const VideosOptionsApi = struct {
             .lang = options.langs,
             .type = options.types,
             .topic = options.topic,
-            .include = if (options.includes.len == 0) null else options.includes,
+            .include = if (options.includes == VideoIncludes.none) null else options.includes,
             .org = options.org,
             .mentioned_channel_id = options.mentioned_channel_id,
             .sort = options.sort,
@@ -700,8 +727,8 @@ pub const ChannelVideosOptions = struct {
     types: ?[]const datatypes.VideoFull.Type = null,
     /// Filter by any of the included statuses. Leave null to query all.
     statuses: ?[]const datatypes.VideoFull.Status = null,
-    /// List of additional information to include for each video.
-    includes: []const VideoIncludes = &.{},
+    /// Additional information to include for each video.
+    includes: VideoIncludes = .{},
     /// Offset to start at.
     offset: u64 = 0,
     /// Maximum number of videos to return. Must be greater than 0, and less
@@ -715,7 +742,7 @@ const ChannelVideosOptionsApi = struct {
     lang: ?[]const datatypes.Language,
     type: ?[]const datatypes.VideoFull.Type,
     status: ?[]const datatypes.VideoFull.Status,
-    include: ?[]const VideoIncludes,
+    include: ?VideoIncludes,
     limit: usize,
     offset: u64,
     paginated: ?bool,
@@ -725,7 +752,7 @@ const ChannelVideosOptionsApi = struct {
             .lang = options.langs,
             .type = options.types,
             .status = options.statuses,
-            .include = if (options.includes.len == 0) null else options.includes,
+            .include = if (options.includes == VideoIncludes.none) null else options.includes,
             .limit = options.limit,
             .offset = options.offset,
             .paginated = if (paginated) true else null,
