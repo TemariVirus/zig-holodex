@@ -13,7 +13,7 @@ are guesswork from querying the API. This library is not affiliated with Holodex
 Run the following command to add the package to your `build.zig.zon`:
 
 ```sh
-zig fetch --save git+https://github.com/TemariVirus/zig-holodex#GIT_COMMIT_HASH_OR_TAG
+zig fetch --save git+https://codeberg.org/TemariVirus/zig-holodex#GIT_COMMIT_HASH_OR_TAG
 ```
 
 Then, reference the package and import it into your module of choice in your `build.zig`:
