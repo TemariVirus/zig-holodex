@@ -37,7 +37,7 @@ pub const Channel = struct {
     /// YouTube channel name.
     name: []const u8,
     /// English name of the channel/channel owner.
-    english_name: ?datatypes.EnglishName = null,
+    english_name: ?[]const u8 = null,
     /// Type of the channel.
     type: datatypes.ChannelFull.Type,
     /// URL to the channel's profile picture.

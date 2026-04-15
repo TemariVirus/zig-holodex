@@ -11,7 +11,7 @@ id: []const u8,
 /// YouTube channel name.
 name: []const u8,
 /// English name of the channel/channel owner.
-english_name: ?datatypes.EnglishName = null,
+english_name: ?[]const u8 = null,
 /// Type of the channel. Ether a VTuber or a subber.
 type: Type,
 /// VTuber organization the channel is part of.
@@ -83,7 +83,7 @@ pub fn jsonParse(
     const parsed = try json.innerParse(struct {
         id: []const u8,
         name: []const u8,
-        english_name: ?datatypes.EnglishName = null,
+        english_name: ?[]const u8 = null,
         type: Type,
         org: ?datatypes.Organization = null,
         group: ?datatypes.Group = null,
