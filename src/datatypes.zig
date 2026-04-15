@@ -174,6 +174,9 @@ pub const Organizations = struct {
     pub const hololive: Organization = "Hololive";
     pub const indies: Organization = "Independents";
     pub const nijisanji: Organization = "Nijisanji";
+    pub const phase_connect: Organization = "Phase Connect";
+    pub const voms: Organization = "VOMS";
+    pub const vspo: Organization = "VSpo";
 };
 
 /// Subgroup of VTubers. Smaller than an organization.
