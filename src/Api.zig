@@ -360,6 +360,39 @@ pub fn fetch(
     };
 }
 
+/// Convenience function for calling `fetch` with `std.Io.async`.
+pub fn fetchAsync(
+    self: *Self,
+    comptime T: type,
+    allocator: Allocator,
+    method: http.Method,
+    path: []const u8,
+    query: anytype,
+    payload: anytype,
+) Io.Future(FetchError!Response(T)) {
+    // We can't pass comptime params through async
+    const _fetch = (struct {
+        fn _fetch(
+            _self: *Self,
+            _allocator: Allocator,
+            _method: http.Method,
+            _path: []const u8,
+            _query: @TypeOf(query),
+            _payload: @TypeOf(payload),
+        ) FetchError!Response(T) {
+            return _self.fetch(T, _allocator, _method, _path, _query, _payload);
+        }
+    })._fetch;
+    return self.client.io.async(_fetch, .{
+        self,
+        allocator,
+        method,
+        path,
+        query,
+        payload,
+    });
+}
+
 fn countJsonLen(value: anytype, options: json.Stringify.Options) u64 {
     var discarding: std.Io.Writer.Discarding = .init(&.{});
     json.Stringify.value(value, options, &discarding.writer) catch unreachable;
@@ -375,6 +408,55 @@ fn requestToFetchError(err: http.Client.RequestError) FetchError {
         => FetchError.TlsCertificateBundleLoadFailure,
         else => |else_err| @as(FetchError, else_err),
     };
+}
+
+fn checkAsyncFunc(func: meta.DeclEnum(Self)) void {
+    const func_name = @tagName(func);
+    const decl_info = @typeInfo(@TypeOf(@field(Self, func_name)));
+    if (decl_info != .@"fn") {
+        @compileError("Not a function");
+    }
+    if (std.mem.eql(u8, func_name, "fetch")) {
+        @compileError("Use fetchAsync instead");
+    }
+    if (std.mem.startsWith(u8, func_name, "page")) {
+        @compileError("Function not supported as Pager is not threadsafe");
+    }
+    const Ret = decl_info.@"fn".return_type.?;
+    switch (@typeInfo(Ret)) {
+        .error_union => |info| {
+            if (!@import("meta.zig").isErrorSubset(info.error_set, FetchError)) {
+                @compileError("Function not supported");
+            }
+        },
+        else => @compileError("Function not supported"),
+    }
+}
+fn FnOptionType(comptime func: meta.DeclEnum(Self)) type {
+    // Must be done here so that it comes before other errors
+    comptime checkAsyncFunc(func);
+    return @typeInfo(
+        @TypeOf(@field(Self, @tagName(func))),
+    ).@"fn".params[2].type.?;
+}
+fn FnReturnType(comptime func: meta.DeclEnum(Self)) type {
+    return @typeInfo(
+        @TypeOf(@field(Self, @tagName(func))),
+    ).@"fn".return_type.?;
+}
+
+/// Convenience function for calling an API endpoint function (`live`,
+/// `videos`, etc.) with `std.Io.async`. Allows non-blocking behaviour.
+pub fn async(
+    self: *Self,
+    comptime func: meta.DeclEnum(Self),
+    allocator: Allocator,
+    options: FnOptionType(func),
+) Io.Future(FnReturnType(func)) {
+    return self.client.io.async(
+        @field(Self, @tagName(func)),
+        .{ self, allocator, options },
+    );
 }
 
 /// Query options for `live` and `liveWithTotal`.

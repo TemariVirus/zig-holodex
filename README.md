@@ -36,18 +36,15 @@ You can find your holodex API key at <https://holodex.net/login>.
 const std = @import("std");
 const holodex = @import("holodex");
 
-pub fn main() !void {
-    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-    const allocator = debug_allocator.allocator();
-    defer _ = debug_allocator.deinit();
-
+pub fn main(init: std.process.Init) !void {
     var api = holodex.Api.init(.{
-        .allocator = allocator,
+        .io = init.io,
+        .allocator = init.gpa,
         .api_key = "YOUR-API-KEY-HERE",
     }) catch unreachable;
     defer api.deinit();
 
-    const comments = try api.searchComments(allocator, .{
+    const comments = try api.searchComments(init.gpa, .{
         .comment = "if...",
         .channels = &.{
             "UCvaTdHTWBGv3MKj3KVqJVCw", // Okayu
@@ -56,6 +53,18 @@ pub fn main() !void {
         .topics = &.{"singing"},
     });
     defer comments.deinit();
+    // Alternatively, use 0.16.0's Io interface to not block
+    // var task = api.async(.searchComments, init.gpa, .{
+    //     .comment = "if...",
+    //     .channels = &.{
+    //         "UCvaTdHTWBGv3MKj3KVqJVCw",
+    //         "UChAnqc_AY5_I3Px5dig3X1Q",
+    //     },
+    //     .topics = &.{"singing"},
+    // });
+    // defer if (task.cancel(init.io)) |res| res.deinit() else |_| {};
+    // (do something else while waiting...)
+    // const comments = try task.await(init.io);
 
     std.debug.print("value: {f}\n", .{holodex.pretty(comments.value)});
     std.debug.print("headers: {f}\n", .{comments.headers});
@@ -68,18 +77,15 @@ pub fn main() !void {
 const std = @import("std");
 const holodex = @import("holodex");
 
-pub fn main() !void {
-    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-    const allocator = debug_allocator.allocator();
-    defer _ = debug_allocator.deinit();
-
+pub fn main(init: std.process.Init) !void {
     var api = holodex.Api.init(.{
-        .allocator = allocator,
+        .io = init.io,
+        .allocator = init.gpa,
         .api_key = "YOUR-API-KEY-HERE",
     }) catch unreachable;
     defer api.deinit();
 
-    var pager = api.pageChannels(allocator, .{
+    var pager = api.pageChannels(init.gpa, .{
         .limit = 10,
         .offset = 0,
         .org = holodex.datatypes.Organizations.hololive,
@@ -89,6 +95,7 @@ pub fn main() !void {
     defer pager.deinit();
 
     var i: usize = 0;
+    // Do not call `pager.next` with `std.Io.async` directly as it is not thread-safe
     while (try pager.next()) |channel| {
         std.debug.print("{s}'s clip count: {d}\n", .{
             channel.english_name orelse channel.name,
